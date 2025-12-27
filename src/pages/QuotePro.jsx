@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V13
+// CDM QUOTE PRO - Main Application V14
 // ============================================================================
 
 // ============================================================================
@@ -1710,35 +1710,51 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
 
   // Load saved quote
   const loadSavedQuote = (quote) => {
-    // Always restore client info
-    setClientInfo(quote.clientInfo);
+    // Database quotes have data in quote_data, local quotes don't
+    const data = quote.quote_data || quote;
     
-    if (quote.quoteType === 'homeEquity') {
+    // Always restore client info
+    if (data.clientInfo) {
+      setClientInfo(data.clientInfo);
+    } else if (quote.client_name) {
+      // Fallback to top-level fields from database
+      setClientInfo({
+        name: quote.client_name || '',
+        email: quote.client_email || '',
+        phone: quote.client_phone || '',
+        address: quote.property_address || '',
+        city: '',
+        state: 'CA',
+        zip: ''
+      });
+    }
+    
+    if (data.quoteType === 'home_equity' || quote.quote_type === 'home_equity') {
       // Load Home Equity quote
-      setSecondMortgageType(quote.productType || 'heloan');
-      setSecondMortgageDetails(quote.secondMortgageDetails);
-      if (quote.heloanRateOptions) setHeloanRateOptions(quote.heloanRateOptions);
-      if (quote.helocRateOptions) setHelocRateOptions(quote.helocRateOptions);
-      if (quote.heOverrides) setHeOverrides(quote.heOverrides);
-      if (quote.loCompensationHE !== undefined) setLoCompensationHE(quote.loCompensationHE);
-      if (quote.recommendedIndex !== undefined) setRecommendedSecondMortgage(quote.recommendedIndex);
+      setSecondMortgageType(data.secondMortgageType || data.productType || 'heloan');
+      if (data.secondMortgageDetails) setSecondMortgageDetails(data.secondMortgageDetails);
+      if (data.heloanRateOptions) setHeloanRateOptions(data.heloanRateOptions);
+      if (data.helocRateOptions) setHelocRateOptions(data.helocRateOptions);
+      if (data.heOverrides) setHeOverrides(data.heOverrides);
+      if (data.loCompensationHE !== undefined) setLoCompensationHE(data.loCompensationHE);
+      if (data.recommendedIndex !== undefined) setRecommendedSecondMortgage(data.recommendedIndex);
       setActiveTab('second');
     } else {
       // Load Purchase/Refi quote
-      setLoanPurpose(quote.loanPurpose);
-      setLoanProgram(quote.loanProgram);
-      setTerm(quote.term);
-      setCreditScore(quote.creditScore || 740);
-      if (quote.baseLoanAmount !== undefined) setBaseLoanAmount(quote.baseLoanAmount);
-      if (quote.isVeteran !== undefined) setIsVeteran(quote.isVeteran);
-      if (quote.rateType) setRateType(quote.rateType);
-      if (quote.armConfig) setArmConfig(quote.armConfig);
-      setPropertyDetails(quote.propertyDetails);
-      if (quote.rateOptions) setRateOptions(quote.rateOptions);
-      if (quote.loCompensation !== undefined) setLoCompensation(quote.loCompensation);
-      if (quote.prepaidSettings) setPrepaidSettings({ ...quote.prepaidSettings, isModified: true });
-      if (quote.feeOverrides) setFeeOverrides(quote.feeOverrides);
-      if (quote.recommendedIndex !== undefined) setRecommendedQuote(quote.recommendedIndex);
+      if (data.loanPurpose) setLoanPurpose(data.loanPurpose);
+      if (data.loanProgram) setLoanProgram(data.loanProgram);
+      if (data.term) setTerm(data.term);
+      setCreditScore(data.creditScore || 740);
+      if (data.baseLoanAmount !== undefined) setBaseLoanAmount(data.baseLoanAmount);
+      if (data.isVeteran !== undefined) setIsVeteran(data.isVeteran);
+      if (data.rateType) setRateType(data.rateType);
+      if (data.armConfig) setArmConfig(data.armConfig);
+      if (data.propertyDetails) setPropertyDetails(data.propertyDetails);
+      if (data.rateOptions) setRateOptions(data.rateOptions);
+      if (data.loCompensation !== undefined) setLoCompensation(data.loCompensation);
+      if (data.prepaidSettings) setPrepaidSettings({ ...data.prepaidSettings, isModified: true });
+      if (data.feeOverrides) setFeeOverrides(data.feeOverrides);
+      if (data.recommendedIndex !== undefined) setRecommendedQuote(data.recommendedIndex);
       setActiveTab('quote');
     }
   };
