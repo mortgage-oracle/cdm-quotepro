@@ -32,7 +32,18 @@ function App() {
 
   const checkSession = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      console.log('Checking session...');
+      
+      // Add a timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Session check timeout')), 5000)
+      );
+      
+      const sessionPromise = supabase.auth.getSession();
+      
+      const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
+      
+      console.log('Session result:', session ? 'Found' : 'None');
       
       if (session) {
         await loadLoanOfficer(session.user.email);
@@ -41,6 +52,7 @@ function App() {
     } catch (error) {
       console.error('Session check error:', error);
     } finally {
+      console.log('Setting loading to false');
       setLoading(false);
     }
   };
