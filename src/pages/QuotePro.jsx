@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V7
+// CDM QUOTE PRO - Main Application V8
 // ============================================================================
 
 // ============================================================================
@@ -984,10 +984,15 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
   }, [loanOfficer?.id]);
   
   const loadQuotesFromDB = async () => {
-    if (!loanOfficer?.id) return;
+    if (!loanOfficer?.id) {
+      console.log('No loanOfficer.id, skipping quote load');
+      return;
+    }
+    console.log('Loading quotes for LO:', loanOfficer.id);
     setLoadingQuotes(true);
     try {
       const quotes = await getQuotesForLO(loanOfficer.id);
+      console.log('Loaded quotes:', quotes?.length || 0, quotes);
       setDbQuotes(quotes || []);
     } catch (err) {
       console.error('Error loading quotes:', err);
