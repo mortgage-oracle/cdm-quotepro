@@ -1,5 +1,5 @@
 // ============================================================================
-// AUTHENTICATION COMPONENT - 12/27 12:23am
+// AUTHENTICATION COMPONENT 12/27 12:28 AM
 // Login / Sign Up for Loan Officers
 // ============================================================================
 
@@ -40,16 +40,26 @@ const AuthComponent = ({ onAuthSuccess }) => {
 
     try {
       console.log('Attempting login...');
-      const { data, error } = await supabase.auth.signInWithPassword({
+      
+      // Add timeout to auth call
+      const authTimeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Auth timeout')), 8000)
+      );
+      
+      const authPromise = supabase.auth.signInWithPassword({
         email,
         password
       });
+
+      const { data, error } = await Promise.race([authPromise, authTimeout]);
+      
+      console.log('Auth response:', data, error);
 
       if (error) throw error;
       console.log('Auth successful, fetching LO profile...');
 
       // Add timeout for LO query
-      const timeoutPromise = new Promise((_, reject) => 
+      const loTimeout = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Database query timeout')), 5000)
       );
 
@@ -59,7 +69,7 @@ const AuthComponent = ({ onAuthSuccess }) => {
         .eq('email', email)
         .single();
 
-      const { data: lo, error: loError } = await Promise.race([loQueryPromise, timeoutPromise]);
+      const { data: lo, error: loError } = await Promise.race([loQueryPromise, loTimeout]);
 
       console.log('LO query result:', lo, loError);
 
