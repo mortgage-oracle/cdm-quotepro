@@ -1,9 +1,9 @@
 // ============================================================================
-// AUTHENTICATION COMPONENT 12/27 12:32am
+// AUTHENTICATION COMPONENT_v4
 // Login / Sign Up for Loan Officers
 // ============================================================================
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 
 const AuthComponent = ({ onAuthSuccess }) => {
@@ -17,6 +17,20 @@ const AuthComponent = ({ onAuthSuccess }) => {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [nmlsNumber, setNmlsNumber] = useState('');
+
+  // Clear any stale session data on mount
+  useEffect(() => {
+    const clearStaleSession = async () => {
+      try {
+        // Sign out any existing session to clear stale data
+        await supabase.auth.signOut();
+        console.log('Cleared any stale session');
+      } catch (err) {
+        console.log('No session to clear');
+      }
+    };
+    clearStaleSession();
+  }, []);
 
   const formatPhoneNumber = (value) => {
     const cleaned = value.replace(/\D/g, '');
