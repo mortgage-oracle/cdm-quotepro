@@ -1,5 +1,5 @@
 // ============================================================================
-// AUTHENTICATION COMPONENT 12/27 12:28 AM
+// AUTHENTICATION COMPONENT 12/27 12:32am
 // Login / Sign Up for Loan Officers
 // ============================================================================
 
@@ -41,57 +41,64 @@ const AuthComponent = ({ onAuthSuccess }) => {
     try {
       console.log('Attempting login...');
       
-      // Add timeout to auth call
-      const authTimeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Auth timeout')), 8000)
-      );
+      // Set a timeout that will fire if auth takes too long
+      const timeoutId = setTimeout(() => {
+        console.log('Auth taking too long, forcing timeout');
+        setError('Login timed out. Please try again.');
+        setLoading(false);
+      }, 10000);
       
-      const authPromise = supabase.auth.signInWithPassword({
+      const result = await supabase.auth.signInWithPassword({
         email,
         password
       });
-
-      const { data, error } = await Promise.race([authPromise, authTimeout]);
       
-      console.log('Auth response:', data, error);
+      clearTimeout(timeoutId);
+      
+      console.log('Auth result:', result);
+      
+      const { data, error } = result;
 
-      if (error) throw error;
-      console.log('Auth successful, fetching LO profile...');
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+        return;
+      }
+      
+      console.log('Auth successful, user:', data.user?.email);
+      console.log('Fetching LO profile...');
 
-      // Add timeout for LO query
-      const loTimeout = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Database query timeout')), 5000)
-      );
-
-      const loQueryPromise = supabase
+      const loResult = await supabase
         .from('loan_officers')
         .select('*')
         .eq('email', email)
         .single();
 
-      const { data: lo, error: loError } = await Promise.race([loQueryPromise, loTimeout]);
-
-      console.log('LO query result:', lo, loError);
+      console.log('LO result:', loResult);
+      
+      const { data: lo, error: loError } = loResult;
 
       if (loError || !lo) {
+        console.log('LO error:', loError);
         setError('No loan officer profile found. Please contact your administrator.');
         await supabase.auth.signOut();
+        setLoading(false);
         return;
       }
 
       if (!lo.is_active) {
         setError('Your account has been deactivated.');
         await supabase.auth.signOut();
+        setLoading(false);
         return;
       }
 
-      console.log('Login complete, calling onAuthSuccess');
+      console.log('Login complete!');
       onAuthSuccess(data.user, lo);
 
     } catch (err) {
       console.error('Login error:', err);
       setError(err.message || 'Login failed.');
-    } finally {
       setLoading(false);
     }
   };
