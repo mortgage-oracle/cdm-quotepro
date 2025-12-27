@@ -1,5 +1,5 @@
 // ============================================================================
-// CDM QUOTE PRO - MAIN APP
+// CDM QUOTE PRO - MAIN APP V2
 // Routes between LO tool and consumer quote view
 // ============================================================================
 
@@ -34,18 +34,17 @@ function App() {
     try {
       console.log('Checking session...');
       
-      // Add a timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Session check timeout')), 5000)
-      );
+      const { data: { session }, error } = await supabase.auth.getSession();
       
-      const sessionPromise = supabase.auth.getSession();
-      
-      const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]);
+      if (error) {
+        console.error('Session check error:', error);
+        setLoading(false);
+        return;
+      }
       
       console.log('Session result:', session ? 'Found' : 'None');
       
-      if (session) {
+      if (session?.user) {
         await loadLoanOfficer(session.user.email);
         setUser(session.user);
       }
@@ -58,15 +57,19 @@ function App() {
   };
 
   const loadLoanOfficer = async (email) => {
-    const { data: lo, error } = await supabase
-      .from('loan_officers')
-      .select('*')
-      .eq('email', email)
-      .single();
+    try {
+      const { data: lo, error } = await supabase
+        .from('loan_officers')
+        .select('*')
+        .eq('email', email.toLowerCase())
+        .single();
 
-    if (!error && lo && lo.is_active) {
-      setLoanOfficer(lo);
-      setUser({ email });
+      if (!error && lo && lo.is_active) {
+        setLoanOfficer(lo);
+        setUser({ email });
+      }
+    } catch (err) {
+      console.error('Error loading loan officer:', err);
     }
   };
 
