@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V20
+// CDM QUOTE PRO - Main Application V22
 // ============================================================================
 
 // ============================================================================
@@ -1105,6 +1105,19 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
     }
   }, [activeTab, loanOfficer?.id]);
   
+  // Sync loan amount when switching to purchase or when purchase details change
+  useEffect(() => {
+    if (loanPurpose === 'purchase' && propertyDetails.purchasePrice > 0) {
+      const calculatedLoanAmount = Math.round(
+        propertyDetails.purchasePrice - (propertyDetails.purchasePrice * (propertyDetails.downPaymentPercent / 100))
+      );
+      // Only update if significantly different (to avoid infinite loops)
+      if (Math.abs(calculatedLoanAmount - baseLoanAmount) > 1) {
+        setBaseLoanAmount(calculatedLoanAmount);
+      }
+    }
+  }, [loanPurpose]);
+  
   // Share quote handler
   const handleShareQuote = async (quoteData) => {
     // Validate client name is entered
@@ -1256,7 +1269,42 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
   };
   const handlePropertyChange = (field, value) => {
     const numValue = parseFloat(value) || 0;
+    
+    // For purchase loans, auto-calculate loan amount when price or down payment changes
+    if (loanPurpose === 'purchase') {
+      if (field === 'purchasePrice') {
+        const newPrice = numValue;
+        const downPaymentAmount = newPrice * (propertyDetails.downPaymentPercent / 100);
+        const newLoanAmount = Math.round(newPrice - downPaymentAmount);
+        setPropertyDetails(prev => ({ ...prev, purchasePrice: newPrice }));
+        setBaseLoanAmount(newLoanAmount);
+        return;
+      }
+      if (field === 'downPaymentPercent') {
+        const newPercent = Math.min(100, Math.max(0, numValue)); // Clamp 0-100
+        const downPaymentAmount = propertyDetails.purchasePrice * (newPercent / 100);
+        const newLoanAmount = Math.round(propertyDetails.purchasePrice - downPaymentAmount);
+        setPropertyDetails(prev => ({ ...prev, downPaymentPercent: newPercent }));
+        setBaseLoanAmount(newLoanAmount);
+        return;
+      }
+    }
+    
     setPropertyDetails(prev => ({ ...prev, [field]: numValue }));
+  };
+  
+  // Handle loan amount change - for purchase, update down payment %
+  const handleLoanAmountChange = (newLoanAmount) => {
+    setBaseLoanAmount(newLoanAmount);
+    
+    // For purchase loans, recalculate down payment %
+    if (loanPurpose === 'purchase' && propertyDetails.purchasePrice > 0) {
+      const downPaymentAmount = propertyDetails.purchasePrice - newLoanAmount;
+      const newDownPaymentPercent = Math.round((downPaymentAmount / propertyDetails.purchasePrice) * 100 * 100) / 100; // Round to 2 decimals
+      if (newDownPaymentPercent >= 0 && newDownPaymentPercent <= 100) {
+        setPropertyDetails(prev => ({ ...prev, downPaymentPercent: newDownPaymentPercent }));
+      }
+    }
   };
   
   const handleRateOptionChange = (index, field, value) => {
@@ -1370,10 +1418,14 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
       const transferTax = (transferTaxRates[clientInfo.state] || 0) * (propertyValue / 1000);
       const governmentFees = recordingFee + transferTax;
       
+      // Section C - Title & Settlement (matches modal breakdown)
+      const lendersTitle = (titleInsuranceRates[clientInfo.state] || 2.5) * (totalLoanAmount / 1000);
+      const sectionCTotal = lendersTitle + feeTemplates.notaryFee + feeTemplates.recordingServiceFee + feeTemplates.settlementFee;
+      
       // D. Total Loan Costs (A + B + C)
       const sectionA = (pointsCost > 0 ? pointsCost : 0) + originationFees;
       const sectionB = thirdPartyFees;
-      const sectionC = titleFees;
+      const sectionC = sectionCTotal;
       const totalLoanCosts = sectionA + sectionB + sectionC;
       
       // I. Total Other Costs (E + F + G)
@@ -2480,7 +2532,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   <label className="label">Loan Amount</label>
                   <CurrencyInput 
                     value={baseLoanAmount} 
-                    onChange={setBaseLoanAmount}
+                    onChange={handleLoanAmountChange}
                     style={{ fontSize: '16px', fontWeight: '600' }}
                   />
                   <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#666' }}>
@@ -2533,14 +2585,46 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                       <label className="label">Purchase Price</label>
                       <CurrencyInput value={propertyDetails.purchasePrice} onChange={(val) => handlePropertyChange('purchasePrice', val)} />
                     </div>
-                    <div style={{ marginTop: '12px' }}>
-                      <label className="label">Down Payment %</label>
-                      <input type="number" value={propertyDetails.downPaymentPercent} onChange={(e) => handlePropertyChange('downPaymentPercent', e.target.value)} />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
+                      <div>
+                        <label className="label">Down Payment %</label>
+                        <input 
+                          type="number" 
+                          value={propertyDetails.downPaymentPercent} 
+                          onChange={(e) => handlePropertyChange('downPaymentPercent', e.target.value)}
+                          min="0"
+                          max="100"
+                          step="0.5"
+                        />
+                      </div>
+                      <div>
+                        <label className="label">Down Payment $</label>
+                        <CurrencyInput 
+                          value={Math.round(propertyDetails.purchasePrice * (propertyDetails.downPaymentPercent / 100))} 
+                          onChange={(val) => {
+                            // Calculate new percentage from dollar amount
+                            if (propertyDetails.purchasePrice > 0) {
+                              const newPercent = Math.round((val / propertyDetails.purchasePrice) * 100 * 100) / 100;
+                              handlePropertyChange('downPaymentPercent', newPercent);
+                            }
+                          }}
+                        />
+                      </div>
                     </div>
-                    <div style={{ marginTop: '14px', padding: '14px', background: '#f5f5f5', borderRadius: '10px', border: '1px solid #e0e0e0' }}>
-                      <div style={{ fontSize: '12px', color: '#666' }}>Down Payment</div>
-                      <div style={{ fontSize: '22px', fontWeight: '700', color: '#1a1a1a', fontFamily: "'JetBrains Mono', monospace" }}>
-                        {formatCurrency(propertyDetails.purchasePrice * (propertyDetails.downPaymentPercent / 100))}
+                    <div style={{ marginTop: '14px', padding: '14px', background: 'linear-gradient(135deg, #f8f8f8, #f0f0f0)', borderRadius: '10px', border: '1px solid #e0e0e0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase' }}>Calculated Loan Amount</div>
+                          <div style={{ fontSize: '20px', fontWeight: '700', color: '#7B2CBF', fontFamily: "'JetBrains Mono', monospace" }}>
+                            {formatCurrency(propertyDetails.purchasePrice - (propertyDetails.purchasePrice * (propertyDetails.downPaymentPercent / 100)))}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase' }}>LTV</div>
+                          <div style={{ fontSize: '16px', fontWeight: '600', color: '#333' }}>
+                            {(100 - propertyDetails.downPaymentPercent).toFixed(1)}%
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </>
