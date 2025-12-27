@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application 12/27/2025 12:44am
+// CDM QUOTE PRO - Main Application V5
 // ============================================================================
 
 // ============================================================================
@@ -1017,12 +1017,18 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
   
   // Share quote handler
   const handleShareQuote = async (quoteData) => {
+    // Validate client name is entered
+    if (!clientInfo.name || clientInfo.name.trim() === '') {
+      alert('Please enter a client name before sharing the quote.');
+      return;
+    }
+    
     try {
       // Save to database first
       const savedQuote = await saveQuote(loanOfficer.id, {
         ...quoteData,
         clientInfo,
-        quoteType: 'mortgage'
+        quoteType: quoteData.quoteType || 'mortgage'
       });
       
       // Generate shareable URL
@@ -2244,7 +2250,32 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                 </div>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button className="btn-secondary" onClick={openSaveModal}>Save Quote</button>
-                  <button className="btn-primary" onClick={() => setActiveTab('rates')}>Edit Rates</button>
+                  <button 
+                    className="btn-primary" 
+                    onClick={() => handleShareQuote({
+                      label: quoteLabel || `Quote for ${clientInfo.name || 'Client'}`,
+                      baseLoanAmount,
+                      loanProgram,
+                      loanPurpose,
+                      term,
+                      creditScore,
+                      rateType,
+                      armConfig,
+                      propertyDetails,
+                      calculations: calculations.slice(0, 3).map((calc, i) => ({
+                        ...calc,
+                        isRecommended: recommendedQuote === i
+                      }))
+                    })}
+                    style={{
+                      background: 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    <span>📤</span> Share Quote
+                  </button>
                 </div>
               </div>
               
@@ -3050,7 +3081,27 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                 {/* Buttons - matches Purchase/Refi */}
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button className="btn-secondary" onClick={openSaveModal}>Save Quote</button>
-                  <button className="btn-primary" onClick={() => setHomeEquityView('editRates')}>Edit Rates</button>
+                  <button 
+                    className="btn-primary" 
+                    onClick={() => handleShareQuote({
+                      label: quoteLabel || `Home Equity Quote for ${clientInfo.name || 'Client'}`,
+                      quoteType: 'home_equity',
+                      secondMortgageType,
+                      secondMortgageDetails,
+                      calculations: secondMortgageCalcs.map((calc, i) => ({
+                        ...calc,
+                        isRecommended: recommendedSecondMortgage === i
+                      }))
+                    })}
+                    style={{
+                      background: 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    <span>📤</span> Share Quote
+                  </button>
                 </div>
               </div>
               
