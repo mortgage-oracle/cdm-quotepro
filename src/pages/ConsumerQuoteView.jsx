@@ -1,5 +1,5 @@
 // ============================================================================
-// CONSUMER QUOTE VIEW PAGE V9
+// CONSUMER QUOTE VIEW PAGE V10
 // What borrowers see when they click their unique quote link
 // ============================================================================
 
@@ -246,7 +246,10 @@ const ConsumerQuoteView = () => {
   
   const programLabel = isHomeEquity
     ? (isHELOC ? 'HELOC' : 'HELOAN')
-    : (quoteData.loanProgram || 'Conventional');
+    : (quoteData.loanProgram === 'fha' ? 'FHA' : 
+       quoteData.loanProgram === 'va' ? 'VA' : 
+       quoteData.loanProgram === 'conventional' ? 'Conventional' :
+       quoteData.loanProgram || 'Conventional');
   
   // Helper to get monthly payment from option
   const getMonthlyPayment = (option) => {
@@ -387,13 +390,19 @@ const ConsumerQuoteView = () => {
           }}>
             <div>
               <div style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase' }}>
-                {isHomeEquity ? 'Draw Amount' : 'Loan Amount'}
+                {isHomeEquity ? 'Draw Amount' : 'Base Loan Amount'}
               </div>
               <div style={{ fontWeight: '600' }}>{formatCurrency(loanAmount)}</div>
+              {/* Show financed fee note for FHA/VA */}
+              {!isHomeEquity && options[0]?.feeBreakdown?.upfrontFee > 0 && options[0]?.feeBreakdown?.upfrontFeeFinanced && (
+                <div style={{ fontSize: '10px', color: '#7B2CBF', marginTop: '2px' }}>
+                  + {formatCurrency(options[0].feeBreakdown.upfrontFee)} {options[0].feeBreakdown.upfrontFeeLabel} financed
+                </div>
+              )}
             </div>
             <div>
               <div style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase' }}>Program</div>
-              <div style={{ fontWeight: '600', textTransform: 'capitalize' }}>{programLabel}</div>
+              <div style={{ fontWeight: '600' }}>{programLabel}</div>
             </div>
             {isHomeEquity && (
               <div>
@@ -722,30 +731,46 @@ const ConsumerQuoteView = () => {
                               <span>Tax Service Fee</span>
                               <span>{formatCurrency(option.feeBreakdown?.sectionB?.taxService || 0)}</span>
                             </div>
-                            {/* Upfront Government Fee (FHA UFMIP or VA Funding Fee) - if paid at closing */}
-                            {option.feeBreakdown?.sectionB?.upfrontFee > 0 && (
-                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#7B2CBF', fontWeight: '600' }}>
-                                <span>{option.feeBreakdown?.sectionB?.upfrontFeeLabel || 'Gov\'t Fee'}</span>
-                                <span>{formatCurrency(option.feeBreakdown.sectionB.upfrontFee)}</span>
+                            {/* Upfront Government Fee (FHA UFMIP or VA Funding Fee) - show in both cases */}
+                            {option.feeBreakdown?.upfrontFee > 0 && (
+                              <div style={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center',
+                                padding: '4px 0', 
+                                marginTop: '4px',
+                                borderTop: '1px dashed #ddd',
+                                color: option.feeBreakdown?.upfrontFeeFinanced ? '#7B2CBF' : '#333',
+                                fontWeight: '600'
+                              }}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  {option.feeBreakdown?.upfrontFeeLabel || 'Gov\'t Fee'}
+                                  {option.feeBreakdown?.upfrontFeeFinanced && (
+                                    <span style={{ 
+                                      background: '#7B2CBF', 
+                                      color: 'white', 
+                                      padding: '1px 5px', 
+                                      borderRadius: '3px', 
+                                      fontSize: '8px',
+                                      textTransform: 'uppercase'
+                                    }}>
+                                      Financed
+                                    </span>
+                                  )}
+                                </span>
+                                <span>
+                                  {option.feeBreakdown?.upfrontFeeFinanced ? (
+                                    <span style={{ color: '#888', fontSize: '11px' }}>
+                                      {formatCurrency(option.feeBreakdown.upfrontFee)} → Loan
+                                    </span>
+                                  ) : (
+                                    formatCurrency(option.feeBreakdown.upfrontFee)
+                                  )}
+                                </span>
                               </div>
                             )}
                           </div>
                         </div>
-                        
-                        {/* Financed Upfront Fee Notice */}
-                        {option.feeBreakdown?.financedUpfrontFee > 0 && (
-                          <div style={{ 
-                            background: '#f3e8ff', 
-                            border: '1px solid #7B2CBF', 
-                            borderRadius: '6px', 
-                            padding: '8px 12px', 
-                            marginBottom: '12px',
-                            fontSize: '12px',
-                            color: '#5b21b6'
-                          }}>
-                            <strong>{option.feeBreakdown.upfrontFeeLabel}:</strong> {formatCurrency(option.feeBreakdown.upfrontFee)} financed into loan amount
-                          </div>
-                        )}
                         
                         {/* Section C */}
                         <div style={{ marginBottom: '12px' }}>
