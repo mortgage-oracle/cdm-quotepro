@@ -1,5 +1,5 @@
 // ============================================================================
-// CDM QUOTE PRO - MAIN APP V3
+// CDM QUOTE PRO - MAIN APP V4
 // Routes between LO tool and consumer quote view
 // ============================================================================
 
@@ -14,6 +14,9 @@ function App() {
   const [user, setUser] = useState(null);
   const [loanOfficer, setLoanOfficer] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Check if we're on a consumer quote page (public, no auth needed)
+  const isConsumerQuotePage = window.location.pathname.startsWith('/q/');
 
   // Clear all Supabase auth storage
   const clearAllAuthStorage = () => {
@@ -41,6 +44,13 @@ function App() {
   };
 
   useEffect(() => {
+    // Skip auth checking entirely on consumer quote pages
+    if (isConsumerQuotePage) {
+      console.log('Consumer quote page - skipping auth check');
+      setLoading(false);
+      return;
+    }
+
     let isMounted = true;
     
     // FAILSAFE: Force loading to false after 3 seconds no matter what
@@ -153,8 +163,8 @@ function App() {
     setLoanOfficer(null);
   };
 
-  // Loading state
-  if (loading) {
+  // Loading state - but skip for consumer quote pages
+  if (loading && !isConsumerQuotePage) {
     return (
       <div style={{
         minHeight: '100vh',
