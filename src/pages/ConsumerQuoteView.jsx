@@ -1,5 +1,5 @@
 // ============================================================================
-// CONSUMER QUOTE VIEW PAGE
+// CONSUMER QUOTE VIEW PAGE V3
 // What borrowers see when they click their unique quote link
 // ============================================================================
 
@@ -145,32 +145,36 @@ const ConsumerQuoteView = () => {
         marginBottom: '24px',
         boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
       }}>
-        <h1 style={{ color: 'white', fontSize: '20px', fontWeight: '700' }}>
-          CDM Quote Pro
-        </h1>
-        <p style={{ color: '#999', fontSize: '12px' }}>Your Personalized Loan Options</p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+          {/* CDM Logo */}
+          <svg width="40" height="40" viewBox="0 0 100 100" style={{ borderRadius: '8px' }}>
+            <defs>
+              <linearGradient id="purpleGradConsumer" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#7B2CBF" />
+                <stop offset="100%" stopColor="#3C096C" />
+              </linearGradient>
+            </defs>
+            {/* Sun rays */}
+            <rect x="47" y="5" width="6" height="25" fill="url(#purpleGradConsumer)" transform="rotate(0, 50, 50)" />
+            <rect x="47" y="5" width="6" height="22" fill="url(#purpleGradConsumer)" transform="rotate(-25, 50, 50)" />
+            <rect x="47" y="5" width="6" height="22" fill="url(#purpleGradConsumer)" transform="rotate(25, 50, 50)" />
+            <rect x="47" y="5" width="6" height="18" fill="url(#purpleGradConsumer)" transform="rotate(-50, 50, 50)" />
+            <rect x="47" y="5" width="6" height="18" fill="url(#purpleGradConsumer)" transform="rotate(50, 50, 50)" />
+            {/* House */}
+            <path d="M50 30 L75 52 L75 80 L25 80 L25 52 Z" fill="url(#purpleGradConsumer)" />
+            <rect x="42" y="58" width="16" height="22" fill="#1a1a1a" rx="2" />
+            <circle cx="54" cy="70" r="2" fill="url(#purpleGradConsumer)" />
+          </svg>
+          <div>
+            <h1 style={{ color: 'white', fontSize: '20px', fontWeight: '700', margin: 0 }}>
+              CDM Quote Pro
+            </h1>
+            <p style={{ color: '#999', fontSize: '12px', margin: 0 }}>Your Personalized Loan Options</p>
+          </div>
+        </div>
       </div>
       
       <div style={{ maxWidth: '600px', margin: '0 auto', padding: '0 16px 40px' }}>
-        {/* Expiry Notice */}
-        {daysUntilExpiry <= 7 && daysUntilExpiry > 0 && (
-          <div style={{
-            background: '#FEF3C7',
-            border: '1px solid #F59E0B',
-            borderRadius: '8px',
-            padding: '10px 14px',
-            fontSize: '12px',
-            color: '#92400E',
-            marginBottom: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <span>⏰</span>
-            <span>This quote expires in {daysUntilExpiry} day{daysUntilExpiry !== 1 ? 's' : ''}.</span>
-          </div>
-        )}
-        
         {/* LO Card */}
         {lo && (
           <div style={{
@@ -238,7 +242,7 @@ const ConsumerQuoteView = () => {
             </div>
             <div>
               <div style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase' }}>Program</div>
-              <div style={{ fontWeight: '600' }}>{quoteData.loanProgram || 'Conventional'}</div>
+              <div style={{ fontWeight: '600', textTransform: 'capitalize' }}>{quoteData.loanProgram || 'Conventional'}</div>
             </div>
           </div>
         </div>
@@ -278,8 +282,8 @@ const ConsumerQuoteView = () => {
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: '10px', color: '#888', textTransform: 'uppercase' }}>Rate</div>
-                <div style={{ fontSize: '28px', fontWeight: '700' }}>{option.rate?.toFixed(3)}%</div>
-                <div style={{ fontSize: '12px', color: '#666' }}>APR: {option.apr?.toFixed(3)}%</div>
+                <div style={{ fontSize: '28px', fontWeight: '700' }}>{(option.rate < 1 ? option.rate * 100 : option.rate)?.toFixed(3)}%</div>
+                <div style={{ fontSize: '12px', color: '#666' }}>APR: {(option.apr < 1 ? option.apr * 100 : option.apr)?.toFixed(3)}%</div>
               </div>
             </div>
             
@@ -341,7 +345,7 @@ const ConsumerQuoteView = () => {
             </button>
             
             {/* Expanded Details */}
-            {expandedOption === index && option.fees && (
+            {expandedOption === index && (
               <div style={{
                 marginTop: '0',
                 border: '2px solid #7B2CBF',
@@ -350,19 +354,52 @@ const ConsumerQuoteView = () => {
                 padding: '20px',
                 background: 'linear-gradient(180deg, #7B2CBF08 0%, #ffffff 20%)'
               }}>
-                {/* Fee sections would go here - simplified for now */}
                 <div style={{ fontSize: '14px', color: '#666' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #eee' }}>
-                    <span>Total Loan Costs</span>
-                    <span style={{ fontWeight: '600' }}>{formatCurrency(option.totalLoanCosts || 0)}</span>
+                  {/* Section A - Origination */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontWeight: '600', fontSize: '13px', color: '#333', marginBottom: '8px', borderBottom: '1px solid #eee', paddingBottom: '4px' }}>
+                      A. Origination Charges
+                    </div>
+                    {option.pointsDollars > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                        <span>Discount Points</span>
+                        <span style={{ fontWeight: '600' }}>{formatCurrency(option.pointsDollars)}</span>
+                      </div>
+                    )}
+                    {option.lenderCredit > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                        <span>Lender Credit</span>
+                        <span style={{ fontWeight: '600', color: '#16a34a' }}>-{formatCurrency(option.lenderCredit)}</span>
+                      </div>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #eee' }}>
-                    <span>Prepaids & Escrows</span>
-                    <span style={{ fontWeight: '600' }}>{formatCurrency(option.totalPrepaidsEscrows || 0)}</span>
+                  
+                  {/* Section B - Services */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontWeight: '600', fontSize: '13px', color: '#333', marginBottom: '8px', borderBottom: '1px solid #eee', paddingBottom: '4px' }}>
+                      B. Services You Cannot Shop For
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                      <span>Closing Costs</span>
+                      <span style={{ fontWeight: '600' }}>{formatCurrency(option.closingCosts || 0)}</span>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', fontWeight: '700', fontSize: '16px' }}>
-                    <span>Total Closing Costs</span>
-                    <span>{formatCurrency(option.totalClosingCosts || 0)}</span>
+                  
+                  {/* Section F - Prepaids */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontWeight: '600', fontSize: '13px', color: '#333', marginBottom: '8px', borderBottom: '1px solid #eee', paddingBottom: '4px' }}>
+                      F. Prepaids & Escrows
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                      <span>Prepaids & Escrows</span>
+                      <span style={{ fontWeight: '600' }}>{formatCurrency(option.totalPrepaidsEscrows || option.prepaidsEscrow || 0)}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Total */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', fontWeight: '700', fontSize: '16px', borderTop: '2px solid #7B2CBF', marginTop: '8px' }}>
+                    <span>Total Cash to Close</span>
+                    <span>{formatCurrency(option.cashToClose || option.totalClosingCosts || 0)}</span>
                   </div>
                 </div>
               </div>
