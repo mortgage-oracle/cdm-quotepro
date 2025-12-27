@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V8
+// CDM QUOTE PRO - Main Application V9
 // ============================================================================
 
 // ============================================================================
@@ -3893,14 +3893,15 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
         {/* ================================================================ */}
         {activeTab === 'saved' && (
           <div className="card">
+            {console.log('Rendering Saved tab, dbQuotes:', dbQuotes?.length, dbQuotes)}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <div>
                 <h2 style={{ fontSize: '24px', fontWeight: '700' }}>Saved Quotes</h2>
                 <p style={{ color: '#666', fontSize: '13px', marginTop: '4px' }}>
-                  {savedQuotes.length} quote{savedQuotes.length !== 1 ? 's' : ''} saved
+                  {dbQuotes.length} quote{dbQuotes.length !== 1 ? 's' : ''} saved
                 </p>
               </div>
-              {savedQuotes.length > 0 && (
+              {dbQuotes.length > 0 && (
                 <div style={{ position: 'relative' }}>
                   <input 
                     type="text"
@@ -3919,7 +3920,12 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
               )}
             </div>
             
-            {savedQuotes.length === 0 ? (
+            {loadingQuotes ? (
+              <div style={{ textAlign: 'center', padding: '60px', color: '#888' }}>
+                <div style={{ fontSize: '24px', marginBottom: '16px' }}>⏳</div>
+                <p>Loading quotes...</p>
+              </div>
+            ) : dbQuotes.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px', color: '#888' }}>
                 <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.5 }}>📋</div>
                 <h3 style={{ fontSize: '18px', marginBottom: '8px' }}>No Saved Quotes</h3>
@@ -3929,19 +3935,14 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
               <>
                 {/* Filter quotes based on search */}
                 {(() => {
-                  const filteredQuotes = savedQuotes.filter(quote => {
+                  const filteredQuotes = dbQuotes.filter(quote => {
                     if (!savedQuotesSearch) return true;
                     const search = savedQuotesSearch.toLowerCase();
-                    const clientName = (quote.clientInfo.name || '').toLowerCase();
-                    const email = (quote.clientInfo.email || '').toLowerCase();
-                    const phone = (quote.clientInfo.phone || '').toLowerCase();
+                    const clientName = (quote.client_name || '').toLowerCase();
+                    const email = (quote.client_email || '').toLowerCase();
+                    const phone = (quote.client_phone || '').toLowerCase();
                     const label = (quote.label || '').toLowerCase();
-                    const program = (quote.loanProgram || '').toLowerCase();
-                    const productType = (quote.productType || '').toLowerCase();
-                    const quoteType = (quote.quoteType || '').toLowerCase();
-                    return clientName.includes(search) || email.includes(search) || phone.includes(search) || 
-                           label.includes(search) || program.includes(search) || productType.includes(search) ||
-                           quoteType.includes(search);
+                    return clientName.includes(search) || email.includes(search) || phone.includes(search) || label.includes(search);
                   });
                   
                   if (filteredQuotes.length === 0) {
@@ -3977,9 +3978,9 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                             textTransform: 'uppercase',
                             letterSpacing: '0.5px'
                           }}>
-                            {quote.quoteType === 'homeEquity' 
-                              ? (quote.productType === 'heloc' ? 'HELOC' : 'HELOAN')
-                              : (quote.loanPurpose === 'purchase' ? 'Purchase' : 'Refi')}
+                            {quote.quote_data?.quoteType === 'homeEquity' 
+                              ? (quote.quote_data?.productType === 'heloc' ? 'HELOC' : 'HELOAN')
+                              : (quote.quote_data?.loanPurpose === 'purchase' ? 'Purchase' : 'Refi')}
                           </div>
                           
                           {/* Label Badge */}
@@ -3999,39 +4000,41 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                             </div>
                           )}
                           
-                          <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>{quote.date}</div>
-                          <div style={{ fontSize: '18px', fontWeight: '700', marginBottom: '2px' }}>
-                            {quote.clientInfo.name || 'No Client Name'}
+                          <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>
+                            {new Date(quote.created_at).toLocaleDateString()}
                           </div>
-                          {quote.clientInfo.email && (
+                          <div style={{ fontSize: '18px', fontWeight: '700', marginBottom: '2px' }}>
+                            {quote.client_name || 'No Client Name'}
+                          </div>
+                          {quote.client_email && (
                             <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
-                              {quote.clientInfo.email}
+                              {quote.client_email}
                             </div>
                           )}
                           
                           {/* Different display based on quote type */}
-                          {quote.quoteType === 'homeEquity' ? (
+                          {quote.quote_type === 'home_equity' ? (
                             <>
                               <div style={{ fontSize: '13px', color: '#555' }}>
-                                {formatCurrency(quote.secondMortgageDetails?.drawAmount || 0)} • {quote.state}
+                                {formatCurrency(quote.quote_data?.secondMortgageDetails?.drawAmount || 0)}
                               </div>
                               <div style={{ marginTop: '8px', fontSize: '12px', color: '#888' }}>
-                                Property: {formatCurrency(quote.secondMortgageDetails?.propertyValue || 0)}
+                                Property: {formatCurrency(quote.quote_data?.secondMortgageDetails?.propertyValue || 0)}
                               </div>
                               <div style={{ marginTop: '12px', fontSize: '20px', fontWeight: '700', color: '#1a1a1a' }} className="mono">
-                                {formatCurrency(quote.calculations[0]?.monthlyPayment || quote.calculations[0]?.interestOnlyPayment || 0)}/mo
+                                {formatCurrency(quote.quote_data?.calculations?.[0]?.monthlyPayment || quote.quote_data?.calculations?.[0]?.interestOnlyPayment || 0)}/mo
                               </div>
                             </>
                           ) : (
                             <>
                               <div style={{ fontSize: '13px', color: '#555' }}>
-                                {(quote.loanProgram || 'conv').toUpperCase()} • {quote.term}yr • {quote.state}
+                                {(quote.quote_data?.loanProgram || 'conv').toUpperCase()} • {quote.quote_data?.term || 30}yr
                               </div>
                               <div style={{ marginTop: '8px', fontSize: '12px', color: '#888' }}>
-                                {formatCurrency(quote.propertyDetails?.purchasePrice || quote.propertyDetails?.homeValue || 0)}
+                                Loan: {formatCurrency(quote.quote_data?.baseLoanAmount || 0)}
                               </div>
                               <div style={{ marginTop: '12px', fontSize: '20px', fontWeight: '700', color: '#1a1a1a' }} className="mono">
-                                {formatCurrency(quote.calculations[0]?.totalMonthlyPayment || 0)}/mo
+                                {formatCurrency(quote.quote_data?.calculations?.[0]?.totalMonthlyPayment || 0)}/mo
                               </div>
                             </>
                           )}
