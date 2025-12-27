@@ -1,15 +1,17 @@
 // ============================================================================
-// AUTHENTICATION COMPONENT V2
+// AUTHENTICATION COMPONENT V3
 // Login / Sign Up for Loan Officers
 // ============================================================================
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
 const AuthComponent = ({ onAuthSuccess }) => {
   const [mode, setMode] = useState('login');
   const [loading, setLoading] = useState(false);
+  const [loginStuck, setLoginStuck] = useState(false);
   const [error, setError] = useState(null);
+  const stuckTimerRef = useRef(null);
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,6 +19,32 @@ const AuthComponent = ({ onAuthSuccess }) => {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [nmlsNumber, setNmlsNumber] = useState('');
+
+  // Cleanup stuck timer on unmount
+  useEffect(() => {
+    return () => {
+      if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current);
+    };
+  }, []);
+
+  // Handle reset when login is stuck (Edge browser issue)
+  const handleReset = () => {
+    console.log('Resetting auth state...');
+    
+    // Clear all localStorage
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch (e) {
+      console.log('Storage clear error:', e);
+    }
+    
+    // Force sign out
+    supabase.auth.signOut().catch(() => {});
+    
+    // Reload page
+    window.location.reload();
+  };
 
   const formatPhoneNumber = (value) => {
     const cleaned = value.replace(/\D/g, '');
@@ -36,18 +64,43 @@ const AuthComponent = ({ onAuthSuccess }) => {
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setLoginStuck(false);
     setError(null);
+
+    // Start stuck detection timer - shows reset option after 8 seconds
+    stuckTimerRef.current = setTimeout(() => {
+      console.log('Login appears stuck, showing reset option');
+      setLoginStuck(true);
+    }, 8000);
 
     try {
       console.log('Attempting login for:', email);
       
-      // Step 1: Sign in with Supabase Auth
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
+      // Step 1: Sign in with Supabase Auth - with timeout
+      const authPromise = supabase.auth.signInWithPassword({
         email,
         password
       });
       
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Login request timed out')), 15000)
+      );
+      
+      let authResult;
+      try {
+        authResult = await Promise.race([authPromise, timeoutPromise]);
+      } catch (timeoutErr) {
+        clearTimeout(stuckTimerRef.current);
+        setError('Login timed out. Please click "Reset & Try Again" below.');
+        setLoginStuck(true);
+        setLoading(false);
+        return;
+      }
+      
+      const { data, error: authError } = authResult;
+      
       if (authError) {
+        clearTimeout(stuckTimerRef.current);
         console.error('Auth error:', authError);
         setError(authError.message);
         setLoading(false);
@@ -55,6 +108,7 @@ const AuthComponent = ({ onAuthSuccess }) => {
       }
       
       if (!data?.user) {
+        clearTimeout(stuckTimerRef.current);
         setError('Login failed. Please try again.');
         setLoading(false);
         return;
@@ -69,6 +123,8 @@ const AuthComponent = ({ onAuthSuccess }) => {
         .select('*')
         .eq('email', email.toLowerCase())
         .single();
+
+      clearTimeout(stuckTimerRef.current);
 
       if (loError) {
         console.error('LO fetch error:', loError);
@@ -96,6 +152,7 @@ const AuthComponent = ({ onAuthSuccess }) => {
       onAuthSuccess(data.user, lo);
 
     } catch (err) {
+      clearTimeout(stuckTimerRef.current);
       console.error('Login error:', err);
       setError(err.message || 'Login failed. Please try again.');
       setLoading(false);
@@ -262,6 +319,22 @@ const AuthComponent = ({ onAuthSuccess }) => {
             {error}
           </div>
         )}
+        
+        {/* Stuck Warning - Edge browser issue */}
+        {loginStuck && !error && (
+          <div style={{
+            background: '#FEF3C7',
+            color: '#92400E',
+            padding: '12px 16px',
+            borderRadius: '10px',
+            fontSize: '13px',
+            marginBottom: '16px',
+            lineHeight: '1.5'
+          }}>
+            <div style={{ fontWeight: '600', marginBottom: '4px' }}>⏳ Taking longer than expected...</div>
+            <div>If login doesn't complete, click the "Reset & Try Again" button below.</div>
+          </div>
+        )}
 
         {/* Login Form */}
         {mode === 'login' && (
@@ -324,6 +397,32 @@ const AuthComponent = ({ onAuthSuccess }) => {
             >
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
+            
+            {/* Reset button - appears when login is stuck (Edge browser issue) */}
+            {loginStuck && (
+              <button
+                type="button"
+                onClick={handleReset}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: '#fee2e2',
+                  color: '#dc2626',
+                  border: '2px solid #fecaca',
+                  borderRadius: '12px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  marginTop: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}
+              >
+                <span>🔄</span> Reset & Try Again
+              </button>
+            )}
           </form>
         )}
 
