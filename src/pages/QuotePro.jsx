@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V18
+// CDM QUOTE PRO - Main Application V20
 // ============================================================================
 
 // ============================================================================
@@ -2724,15 +2724,24 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                         // Section J (Total Closing Costs)
                         const totalClosingCosts = totalLoanCosts + totalOtherCosts;
                         
-                        // Cash to Close
+                        // Cash to Close / Cash Out calculation
                         const downPayment = loanPurpose === 'purchase' ? propertyValue - baseLoanAmount : 0;
-                        const cashToClose = loanPurpose === 'purchase' 
-                          ? downPayment + totalClosingCosts - calc.lenderCredit
-                          : totalClosingCosts - calc.lenderCredit;
+                        const netClosingCosts = totalClosingCosts - calc.lenderCredit;
+                        
+                        let cashToClose;
+                        if (loanPurpose === 'purchase') {
+                          // Purchase: Down payment + closing costs
+                          cashToClose = downPayment + netClosingCosts;
+                        } else {
+                          // Refinance: New loan - payoff - closing costs = cash out
+                          const currentBalance = propertyDetails.currentBalance || 0;
+                          cashToClose = baseLoanAmount - currentBalance - netClosingCosts;
+                        }
                         
                         return {
                           ...calc,
                           isRecommended: recommendedQuote === i,
+                          cashFlow: cashToClose, // For consumer view cash out display
                           feeBreakdown: {
                             sectionA,
                             sectionB,
@@ -2982,7 +2991,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                         )}
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 0', marginTop: '8px', borderTop: '1px solid #ddd' }}>
                           <span style={{ fontWeight: '600', color: '#333' }}>Total Closing Costs</span>
-                          <span className="mono" style={{ fontWeight: '700' }}>{formatCurrency(calc.totalSettlement)}</span>
+                          <span className="mono" style={{ fontWeight: '700' }}>{formatCurrency(calc.totalClosingCosts)}</span>
                         </div>
                       </div>
                       
@@ -4558,12 +4567,12 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   .filter(notif => {
                     if (notificationFilter === 'all') return true;
                     if (notificationFilter === 'unread') return !notif.is_read;
-                    if (notificationFilter === 'applied') return notif.quote_views?.clicked_apply;
+                    if (notificationFilter === 'applied') return notif.notification_type === 'apply_click';
                     if (notificationFilter === 'reviewed') return notif.reviewed;
                     return true;
                   })
                   .map(notif => {
-                    const isApplied = notif.quote_views?.clicked_apply;
+                    const isApplied = notif.notification_type === 'apply_click';
                     const isNew = !notif.is_read;
                     
                     return (
@@ -4585,7 +4594,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                             {notif.quotes?.client_name || 'Unknown'}
                           </div>
                           <div style={{ fontSize: '11px', color: '#888' }}>
-                            {notif.quote_views?.device_type || 'Unknown device'}
+                            {notif.notification_type === 'apply_click' ? 'Applied!' : 'Viewed quote'}
                           </div>
                         </div>
                         
@@ -4726,7 +4735,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                 {allNotifications.filter(notif => {
                   if (notificationFilter === 'all') return true;
                   if (notificationFilter === 'unread') return !notif.is_read;
-                  if (notificationFilter === 'applied') return notif.quote_views?.clicked_apply;
+                  if (notificationFilter === 'applied') return notif.notification_type === 'apply_click';
                   if (notificationFilter === 'reviewed') return notif.reviewed;
                   return true;
                 }).length === 0 && (
@@ -4753,7 +4762,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                 </div>
                 <div style={{ background: '#f0fdf4', padding: '16px', borderRadius: '10px', textAlign: 'center' }}>
                   <div style={{ fontSize: '24px', fontWeight: '700', color: '#22c55e' }}>
-                    {allNotifications.filter(n => n.quote_views?.clicked_apply).length}
+                    {allNotifications.filter(n => n.notification_type === 'apply_click').length}
                   </div>
                   <div style={{ fontSize: '12px', color: '#888' }}>Applied</div>
                 </div>
