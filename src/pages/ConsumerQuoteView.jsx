@@ -1,5 +1,5 @@
 // ============================================================================
-// CONSUMER QUOTE VIEW PAGE V3
+// CONSUMER QUOTE VIEW PAGE V4
 // What borrowers see when they click their unique quote link
 // ============================================================================
 
@@ -360,10 +360,10 @@ const ConsumerQuoteView = () => {
                     <div style={{ fontWeight: '600', fontSize: '13px', color: '#333', marginBottom: '8px', borderBottom: '1px solid #eee', paddingBottom: '4px' }}>
                       A. Origination Charges
                     </div>
-                    {option.pointsDollars > 0 && (
+                    {option.pointsCost > 0 && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-                        <span>Discount Points</span>
-                        <span style={{ fontWeight: '600' }}>{formatCurrency(option.pointsDollars)}</span>
+                        <span>Discount Points ({((option.pointsCost / option.baseLoanAmount) * 100).toFixed(3)}%)</span>
+                        <span style={{ fontWeight: '600' }}>{formatCurrency(option.pointsCost)}</span>
                       </div>
                     )}
                     {option.lenderCredit > 0 && (
@@ -372,34 +372,103 @@ const ConsumerQuoteView = () => {
                         <span style={{ fontWeight: '600', color: '#16a34a' }}>-{formatCurrency(option.lenderCredit)}</span>
                       </div>
                     )}
+                    {!option.pointsCost && !option.lenderCredit && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                        <span>Par Pricing (no points)</span>
+                        <span style={{ fontWeight: '600' }}>$0</span>
+                      </div>
+                    )}
                   </div>
                   
-                  {/* Section B - Services */}
+                  {/* Section B & C - Third Party Fees */}
                   <div style={{ marginBottom: '16px' }}>
                     <div style={{ fontWeight: '600', fontSize: '13px', color: '#333', marginBottom: '8px', borderBottom: '1px solid #eee', paddingBottom: '4px' }}>
                       B. Services You Cannot Shop For
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-                      <span>Closing Costs</span>
-                      <span style={{ fontWeight: '600' }}>{formatCurrency(option.closingCosts || 0)}</span>
+                      <span>Appraisal, Credit Report, Tax Service, etc.</span>
+                      <span style={{ fontWeight: '600' }}>{formatCurrency(option.thirdPartyFees || 0)}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Section C - Title */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontWeight: '600', fontSize: '13px', color: '#333', marginBottom: '8px', borderBottom: '1px solid #eee', paddingBottom: '4px' }}>
+                      C. Services You Can Shop For
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                      <span>Title Insurance & Settlement</span>
+                      <span style={{ fontWeight: '600' }}>{formatCurrency(option.titleFees || 0)}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Section D - Total Loan Costs */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', background: '#f0f0f0', borderRadius: '6px', paddingLeft: '8px', paddingRight: '8px' }}>
+                      <span style={{ fontWeight: '600' }}>D. Total Loan Costs (A+B+C)</span>
+                      <span style={{ fontWeight: '600' }}>{formatCurrency(option.totalLoanCosts || 0)}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Section E - Government Fees */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontWeight: '600', fontSize: '13px', color: '#333', marginBottom: '8px', borderBottom: '1px solid #eee', paddingBottom: '4px' }}>
+                      E. Taxes & Government Fees
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                      <span>Recording & Transfer Taxes</span>
+                      <span style={{ fontWeight: '600' }}>{formatCurrency(option.governmentFees || 0)}</span>
                     </div>
                   </div>
                   
                   {/* Section F - Prepaids */}
                   <div style={{ marginBottom: '16px' }}>
                     <div style={{ fontWeight: '600', fontSize: '13px', color: '#333', marginBottom: '8px', borderBottom: '1px solid #eee', paddingBottom: '4px' }}>
-                      F. Prepaids & Escrows
+                      F. Prepaids
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
-                      <span>Prepaids & Escrows</span>
-                      <span style={{ fontWeight: '600' }}>{formatCurrency(option.totalPrepaidsEscrows || option.prepaidsEscrow || 0)}</span>
+                      <span>Prepaid Interest, Insurance & Taxes</span>
+                      <span style={{ fontWeight: '600' }}>{formatCurrency(option.totalPrepaids || 0)}</span>
                     </div>
                   </div>
                   
-                  {/* Total */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', fontWeight: '700', fontSize: '16px', borderTop: '2px solid #7B2CBF', marginTop: '8px' }}>
-                    <span>Total Cash to Close</span>
-                    <span>{formatCurrency(option.cashToClose || option.totalClosingCosts || 0)}</span>
+                  {/* Section G - Escrow */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontWeight: '600', fontSize: '13px', color: '#333', marginBottom: '8px', borderBottom: '1px solid #eee', paddingBottom: '4px' }}>
+                      G. Initial Escrow Payment
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                      <span>Escrow Reserves</span>
+                      <span style={{ fontWeight: '600' }}>{formatCurrency(option.escrowReserves || 0)}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Section I - Total Other Costs */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', background: '#f0f0f0', borderRadius: '6px', paddingLeft: '8px', paddingRight: '8px' }}>
+                      <span style={{ fontWeight: '600' }}>I. Total Other Costs (E+F+G)</span>
+                      <span style={{ fontWeight: '600' }}>{formatCurrency(option.totalOtherCosts || 0)}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Section J - Total */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 8px', fontWeight: '700', fontSize: '16px', background: 'linear-gradient(135deg, #7B2CBF15, #9D4EDD15)', borderRadius: '8px', marginTop: '8px' }}>
+                    <span>J. Total Closing Costs (D+I)</span>
+                    <span>{formatCurrency(option.totalClosingCosts || 0)}</span>
+                  </div>
+                  
+                  {/* Lender Credit if applicable */}
+                  {option.lenderCredit > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px', marginTop: '8px', color: '#16a34a' }}>
+                      <span style={{ fontWeight: '600' }}>Lender Credit Applied</span>
+                      <span style={{ fontWeight: '600' }}>-{formatCurrency(option.lenderCredit)}</span>
+                    </div>
+                  )}
+                  
+                  {/* Final Cash to Close */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 8px', fontWeight: '700', fontSize: '18px', borderTop: '3px solid #7B2CBF', marginTop: '12px' }}>
+                    <span>Cash to Close</span>
+                    <span style={{ color: '#7B2CBF' }}>{formatCurrency(option.totalSettlement || option.totalClosingCosts || 0)}</span>
                   </div>
                 </div>
               </div>
