@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V17
+// CDM QUOTE PRO - Main Application V18
 // ============================================================================
 
 // ============================================================================
@@ -1034,6 +1034,20 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
       console.error('Error loading quotes:', err);
     } finally {
       setLoadingQuotes(false);
+    }
+  };
+  
+  const handleDeleteQuote = async (quoteId) => {
+    if (!confirm('Are you sure you want to delete this quote? This cannot be undone.')) {
+      return;
+    }
+    try {
+      await deleteQuote(quoteId);
+      // Remove from local state immediately for instant feedback
+      setDbQuotes(prev => prev.filter(q => q.id !== quoteId));
+    } catch (err) {
+      console.error('Error deleting quote:', err);
+      alert('Failed to delete quote. Please try again.');
     }
   };
   
@@ -3581,16 +3595,18 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   <button className="btn-secondary" onClick={openSaveModal}>Save Quote</button>
                   <button 
                     className="btn-primary" 
-                    onClick={() => handleShareQuote({
-                      label: quoteLabel || `Home Equity Quote for ${clientInfo.name || 'Client'}`,
-                      quoteType: 'home_equity',
-                      secondMortgageType,
-                      secondMortgageDetails,
-                      calculations: secondMortgageCalcs.map((calc, i) => ({
-                        ...calc,
-                        isRecommended: recommendedSecondMortgage === i
-                      }))
-                    })}
+                    onClick={() => {
+                      handleShareQuote({
+                        label: quoteLabel || `Home Equity Quote for ${clientInfo.name || 'Client'}`,
+                        quoteType: 'home_equity',
+                        secondMortgageType,
+                        secondMortgageDetails,
+                        calculations: secondMortgageCalcs.map((calc, i) => ({
+                          ...calc,
+                          isRecommended: recommendedSecondMortgage === i
+                        }))
+                      });
+                    }}
                     style={{
                       background: 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
                       display: 'flex',
@@ -4453,7 +4469,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                               Load Quote
                             </button>
                             <button 
-                              onClick={(e) => { e.stopPropagation(); setSavedQuotes(prev => prev.filter(q => q.id !== quote.id)); }}
+                              onClick={(e) => { e.stopPropagation(); handleDeleteQuote(quote.id); }}
                               style={{ 
                                 background: 'rgba(239, 68, 68, 0.1)', 
                                 border: 'none', 
