@@ -1,5 +1,5 @@
 // ============================================================================
-// CDM QUOTE PRO - MAIN APP V2
+// CDM QUOTE PRO - MAIN APP V3
 // Routes between LO tool and consumer quote view
 // ============================================================================
 
@@ -15,10 +15,58 @@ function App() {
   const [loanOfficer, setLoanOfficer] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Clear all Supabase auth storage
+  const clearAllAuthStorage = () => {
+    console.log('Clearing all auth storage...');
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith('sb-') || key.includes('supabase') || key.includes('auth'))) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(key => {
+      console.log('Removing:', key);
+      localStorage.removeItem(key);
+    });
+    
+    const sessionKeysToRemove = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key && (key.startsWith('sb-') || key.includes('supabase') || key.includes('auth'))) {
+        sessionKeysToRemove.push(key);
+      }
+    }
+    sessionKeysToRemove.forEach(key => sessionStorage.removeItem(key));
+  };
+
   useEffect(() => {
-    checkSession();
+    let isMounted = true;
+    
+    // FAILSAFE: Force loading to false after 3 seconds no matter what
+    const failsafeTimeout = setTimeout(() => {
+      if (isMounted) {
+        console.log('Failsafe timeout - clearing storage and forcing loading to false');
+        clearAllAuthStorage();
+        setLoading(false);
+      }
+    }, 3000);
+
+    const init = async () => {
+      try {
+        await checkSession();
+      } finally {
+        if (isMounted) {
+          clearTimeout(failsafeTimeout);
+          setLoading(false);
+        }
+      }
+    };
+    
+    init();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state change:', event);
       if (event === 'SIGNED_OUT') {
         setUser(null);
         setLoanOfficer(null);
@@ -27,18 +75,41 @@ function App() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      clearTimeout(failsafeTimeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const checkSession = async () => {
     try {
       console.log('Checking session...');
       
-      const { data: { session }, error } = await supabase.auth.getSession();
+      // Wrap getSession in a timeout promise
+      const getSessionWithTimeout = () => {
+        return new Promise(async (resolve) => {
+          const timeout = setTimeout(() => {
+            console.log('getSession timed out');
+            resolve({ data: { session: null }, error: new Error('Timeout') });
+          }, 2000);
+          
+          try {
+            const result = await supabase.auth.getSession();
+            clearTimeout(timeout);
+            resolve(result);
+          } catch (err) {
+            clearTimeout(timeout);
+            resolve({ data: { session: null }, error: err });
+          }
+        });
+      };
+      
+      const { data: { session }, error } = await getSessionWithTimeout();
       
       if (error) {
-        console.error('Session check error:', error);
-        setLoading(false);
+        console.log('Session check error or timeout, clearing storage:', error.message);
+        clearAllAuthStorage();
         return;
       }
       
@@ -50,9 +121,7 @@ function App() {
       }
     } catch (error) {
       console.error('Session check error:', error);
-    } finally {
-      console.log('Setting loading to false');
-      setLoading(false);
+      clearAllAuthStorage();
     }
   };
 
@@ -107,6 +176,25 @@ function App() {
             margin: '0 auto 16px'
           }} />
           <div>Loading...</div>
+          <button
+            onClick={() => {
+              localStorage.clear();
+              sessionStorage.clear();
+              window.location.reload();
+            }}
+            style={{
+              marginTop: '24px',
+              padding: '10px 20px',
+              background: 'transparent',
+              border: '1px solid rgba(255,255,255,0.3)',
+              borderRadius: '8px',
+              color: 'rgba(255,255,255,0.7)',
+              fontSize: '13px',
+              cursor: 'pointer'
+            }}
+          >
+            Having trouble? Click to reset
+          </button>
           <style>{`
             @keyframes spin {
               to { transform: rotate(360deg); }
