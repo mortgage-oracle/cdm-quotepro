@@ -1,9 +1,9 @@
 // ============================================================================
-// AUTHENTICATION COMPONENT_v4
+// AUTHENTICATION COMPONENT V2
 // Login / Sign Up for Loan Officers
 // ============================================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 
 const AuthComponent = ({ onAuthSuccess }) => {
@@ -17,20 +17,6 @@ const AuthComponent = ({ onAuthSuccess }) => {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [nmlsNumber, setNmlsNumber] = useState('');
-
-  // Clear any stale session data on mount
-  useEffect(() => {
-    const clearStaleSession = async () => {
-      try {
-        // Sign out any existing session to clear stale data
-        await supabase.auth.signOut();
-        console.log('Cleared any stale session');
-      } catch (err) {
-        console.log('No session to clear');
-      }
-    };
-    clearStaleSession();
-  }, []);
 
   const formatPhoneNumber = (value) => {
     const cleaned = value.replace(/\D/g, '');
@@ -53,47 +39,46 @@ const AuthComponent = ({ onAuthSuccess }) => {
     setError(null);
 
     try {
-      console.log('Attempting login...');
+      console.log('Attempting login for:', email);
       
-      // Set a timeout that will fire if auth takes too long
-      const timeoutId = setTimeout(() => {
-        console.log('Auth taking too long, forcing timeout');
-        setError('Login timed out. Please try again.');
-        setLoading(false);
-      }, 10000);
-      
-      const result = await supabase.auth.signInWithPassword({
+      // Step 1: Sign in with Supabase Auth
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password
       });
       
-      clearTimeout(timeoutId);
-      
-      console.log('Auth result:', result);
-      
-      const { data, error } = result;
-
-      if (error) {
-        setError(error.message);
+      if (authError) {
+        console.error('Auth error:', authError);
+        setError(authError.message);
         setLoading(false);
         return;
       }
       
-      console.log('Auth successful, user:', data.user?.email);
+      if (!data?.user) {
+        setError('Login failed. Please try again.');
+        setLoading(false);
+        return;
+      }
+      
+      console.log('Auth successful, user:', data.user.email);
+      
+      // Step 2: Fetch loan officer profile
       console.log('Fetching LO profile...');
-
-      const loResult = await supabase
+      const { data: lo, error: loError } = await supabase
         .from('loan_officers')
         .select('*')
-        .eq('email', email)
+        .eq('email', email.toLowerCase())
         .single();
 
-      console.log('LO result:', loResult);
+      if (loError) {
+        console.error('LO fetch error:', loError);
+        setError('No loan officer profile found. Please contact your administrator.');
+        await supabase.auth.signOut();
+        setLoading(false);
+        return;
+      }
       
-      const { data: lo, error: loError } = loResult;
-
-      if (loError || !lo) {
-        console.log('LO error:', loError);
+      if (!lo) {
         setError('No loan officer profile found. Please contact your administrator.');
         await supabase.auth.signOut();
         setLoading(false);
@@ -112,7 +97,7 @@ const AuthComponent = ({ onAuthSuccess }) => {
 
     } catch (err) {
       console.error('Login error:', err);
-      setError(err.message || 'Login failed.');
+      setError(err.message || 'Login failed. Please try again.');
       setLoading(false);
     }
   };
