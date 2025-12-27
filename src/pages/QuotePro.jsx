@@ -1643,9 +1643,10 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
         justifyContent: 'space-between',
         position: 'sticky',
         top: 0,
-        zIndex: 100
+        zIndex: 100,
+        gap: '20px'
       }} className="no-print">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0 }}>
           {/* CDM Logo */}
           <svg width="44" height="44" viewBox="0 0 100 100" style={{ borderRadius: '8px' }}>
             <defs>
@@ -1672,7 +1673,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
           </div>
         </div>
         
-        <nav style={{ display: 'flex', gap: '4px' }}>
+        <nav style={{ display: 'flex', gap: '4px', flex: '1', justifyContent: 'center' }}>
           {[
             { id: 'quote', label: 'Purchase/Refi' },
             { id: 'second', label: 'Home Equity' },
@@ -1701,7 +1702,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
         </nav>
         
         {/* User Section */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexShrink: 0 }}>
           {/* Notifications */}
           <div style={{ position: 'relative' }}>
             <button
@@ -1716,7 +1717,8 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                 alignItems: 'center',
                 gap: '6px',
                 color: 'white',
-                fontSize: '14px'
+                fontSize: '14px',
+                zIndex: 101
               }}
             >
               🔔 {notifications.length > 0 && <span style={{ fontWeight: '600' }}>{notifications.length}</span>}
