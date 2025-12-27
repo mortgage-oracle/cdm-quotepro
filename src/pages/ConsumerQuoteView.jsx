@@ -1,5 +1,5 @@
 // ============================================================================
-// CONSUMER QUOTE VIEW PAGE V10
+// CONSUMER QUOTE VIEW PAGE V11
 // What borrowers see when they click their unique quote link
 // ============================================================================
 
@@ -275,6 +275,21 @@ const ConsumerQuoteView = () => {
         value: option.netProceeds || 0
       };
     }
+    
+    // Check if this is a cash-out refinance
+    const isPurchase = quoteData.loanPurpose === 'purchase';
+    const isCashOut = quoteData.loanPurpose === 'refinance' || quoteData.loanPurpose === 'cash_out';
+    
+    if (isCashOut) {
+      // For cash-out refinance, cash flows TO borrower
+      const cashOut = option.cashFlow || option.feeBreakdown?.cashToClose || 0;
+      return {
+        label: 'Est. Cash Out',
+        value: Math.abs(cashOut)
+      };
+    }
+    
+    // For purchase, cash flows FROM borrower
     return {
       label: 'Est. Cash to Close',
       value: option.feeBreakdown?.cashToClose || option.totalSettlement || option.totalClosingCosts || 0
@@ -887,19 +902,33 @@ const ConsumerQuoteView = () => {
                       </div>
                     </div>
                     
-                    {/* Cash to Close Calculation */}
+                    {/* Cash to Close / Cash Out Calculation */}
                     <div style={{ marginTop: '20px', borderTop: '2px solid #7B2CBF', paddingTop: '16px' }}>
-                      <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '12px' }}>Calculating Cash to Close</div>
+                      <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '12px' }}>
+                        {quoteData.loanPurpose === 'purchase' ? 'Calculating Cash to Close' : 'Calculating Cash Out'}
+                      </div>
                       <div style={{ fontSize: '14px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
                           <span>Total Closing Costs (J)</span>
                           <span style={{ fontWeight: '600' }}>{formatCurrency(option.feeBreakdown?.totalClosingCosts || 0)}</span>
                         </div>
-                        {option.feeBreakdown?.downPayment > 0 && (
+                        {quoteData.loanPurpose === 'purchase' && option.feeBreakdown?.downPayment > 0 && (
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
                             <span>Down Payment</span>
                             <span style={{ fontWeight: '600' }}>{formatCurrency(option.feeBreakdown.downPayment)}</span>
                           </div>
+                        )}
+                        {quoteData.loanPurpose !== 'purchase' && (
+                          <>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
+                              <span>New Loan Amount</span>
+                              <span style={{ fontWeight: '600' }}>{formatCurrency(quoteData.baseLoanAmount || 0)}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
+                              <span>Current Mortgage Payoff</span>
+                              <span style={{ fontWeight: '600' }}>-{formatCurrency(quoteData.propertyDetails?.currentBalance || 0)}</span>
+                            </div>
+                          </>
                         )}
                         {option.lenderCredit > 0 && (
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', color: '#16a34a' }}>
@@ -917,8 +946,8 @@ const ConsumerQuoteView = () => {
                           fontWeight: '700',
                           fontSize: '18px'
                         }}>
-                          <span>Estimated Cash to Close</span>
-                          <span style={{ color: '#7B2CBF' }}>{formatCurrency(option.feeBreakdown?.cashToClose || 0)}</span>
+                          <span>{quoteData.loanPurpose === 'purchase' ? 'Estimated Cash to Close' : 'Estimated Cash Out'}</span>
+                          <span style={{ color: '#7B2CBF' }}>{formatCurrency(Math.abs(option.cashFlow || option.feeBreakdown?.cashToClose || 0))}</span>
                         </div>
                       </div>
                     </div>
