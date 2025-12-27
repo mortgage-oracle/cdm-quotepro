@@ -1,5 +1,5 @@
 // ============================================================================
-// SUPABASE CLIENT CONFIGURATION V3
+// SUPABASE CLIENT CONFIGURATION V5
 // CDM Quote Pro - Database Connection
 // ============================================================================
 
@@ -55,30 +55,55 @@ export async function saveQuote(loanOfficerId, quoteData) {
  * Get a quote by its shareable ID (for consumer view)
  */
 export async function getQuoteByShareId(shareId) {
-  const { data, error } = await supabase
-    .from('quotes')
-    .select(`
-      *,
-      loan_officers (
-        id,
-        full_name,
-        email,
-        phone,
-        nmls_number,
-        title,
-        photo_url,
-        application_url
-      )
-    `)
-    .eq('share_id', shareId)
-    .single();
-
-  if (error) {
-    console.error('Error fetching quote:', error);
-    throw error;
+  console.log('Fetching quote with shareId:', shareId);
+  
+  const fetchWithTimeout = async () => {
+    return new Promise(async (resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Quote fetch timeout'));
+      }, 10000);
+      
+      try {
+        const { data, error } = await supabase
+          .from('quotes')
+          .select(`
+            *,
+            loan_officers (
+              id,
+              full_name,
+              email,
+              phone,
+              nmls_number,
+              title,
+              photo_url,
+              application_url
+            )
+          `)
+          .eq('share_id', shareId)
+          .single();
+        
+        clearTimeout(timeout);
+        
+        if (error) {
+          reject(error);
+        } else {
+          resolve(data);
+        }
+      } catch (err) {
+        clearTimeout(timeout);
+        reject(err);
+      }
+    });
+  };
+  
+  try {
+    const data = await fetchWithTimeout();
+    console.log('Quote fetched successfully:', data?.id);
+    return data;
+  } catch (err) {
+    console.error('getQuoteByShareId error:', err);
+    throw err;
   }
-
-  return data;
 }
 
 /**
@@ -209,7 +234,9 @@ export async function getUnreadNotifications(loanOfficerId) {
         id,
         share_id,
         client_name,
-        label
+        label,
+        quote_type,
+        quote_data
       )
     `)
     .eq('loan_officer_id', loanOfficerId)
@@ -225,7 +252,43 @@ export async function getUnreadNotifications(loanOfficerId) {
 }
 
 /**
- * Mark a notification as read
+ * Get ALL notifications for a loan officer (for Notifications page)
+ */
+export async function getAllNotifications(loanOfficerId, limit = 100) {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select(`
+      *,
+      quotes (
+        id,
+        share_id,
+        client_name,
+        label,
+        quote_type,
+        quote_data,
+        created_at
+      ),
+      quote_views (
+        id,
+        clicked_apply,
+        device_type,
+        created_at
+      )
+    `)
+    .eq('loan_officer_id', loanOfficerId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('Error fetching all notifications:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+/**
+ * Mark a notification as read (dismissed from bell)
  */
 export async function markNotificationRead(notificationId) {
   const { error } = await supabase
@@ -238,6 +301,26 @@ export async function markNotificationRead(notificationId) {
 
   if (error) {
     console.error('Error marking notification read:', error);
+    throw error;
+  }
+
+  return true;
+}
+
+/**
+ * Mark a notification as reviewed (user has followed up)
+ */
+export async function markNotificationReviewed(notificationId, reviewed = true) {
+  const { error } = await supabase
+    .from('notifications')
+    .update({ 
+      reviewed: reviewed,
+      reviewed_at: reviewed ? new Date().toISOString() : null
+    })
+    .eq('id', notificationId);
+
+  if (error) {
+    console.error('Error marking notification reviewed:', error);
     throw error;
   }
 
