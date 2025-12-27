@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnreadNotifications, subscribeToNotifications, markNotificationRead, updateLoanOfficerProfile, updateLoanOfficerByEmail } from '../supabaseClient';
+import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnreadNotifications, getAllNotifications, subscribeToNotifications, markNotificationRead, markNotificationReviewed, updateLoanOfficerProfile, updateLoanOfficerByEmail } from '../supabaseClient';
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V16
+// CDM QUOTE PRO - Main Application V17
 // ============================================================================
 
 // ============================================================================
@@ -765,6 +765,9 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
   
   // Notifications
   const [notifications, setNotifications] = useState([]);
+  const [allNotifications, setAllNotifications] = useState([]);
+  const [notificationFilter, setNotificationFilter] = useState('all'); // 'all', 'unread', 'applied', 'reviewed'
+  const [loadingAllNotifications, setLoadingAllNotifications] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   
   // Database quotes
@@ -1044,14 +1047,49 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
     }
   };
   
+  const loadAllNotifications = async () => {
+    if (!loanOfficer?.id) return;
+    setLoadingAllNotifications(true);
+    try {
+      const notifs = await getAllNotifications(loanOfficer.id);
+      setAllNotifications(notifs || []);
+    } catch (err) {
+      console.error('Error loading all notifications:', err);
+    } finally {
+      setLoadingAllNotifications(false);
+    }
+  };
+  
   const handleMarkNotificationRead = async (notificationId) => {
     try {
       await markNotificationRead(notificationId);
       setNotifications(prev => prev.filter(n => n.id !== notificationId));
+      // Also update in allNotifications
+      setAllNotifications(prev => prev.map(n => 
+        n.id === notificationId ? { ...n, is_read: true, read_at: new Date().toISOString() } : n
+      ));
     } catch (err) {
       console.error('Error marking notification read:', err);
     }
   };
+  
+  const handleMarkNotificationReviewed = async (notificationId, reviewed = true) => {
+    try {
+      await markNotificationReviewed(notificationId, reviewed);
+      setAllNotifications(prev => prev.map(n => 
+        n.id === notificationId ? { ...n, reviewed, reviewed_at: reviewed ? new Date().toISOString() : null } : n
+      ));
+    } catch (err) {
+      console.error('Error marking notification reviewed:', err);
+    }
+  };
+  
+  // Load all notifications when switching to notifications tab
+  useEffect(() => {
+    if (activeTab === 'notifications' && loanOfficer?.id) {
+      loadAllNotifications();
+    }
+  }, [activeTab, loanOfficer?.id]);
   
   // Share quote handler
   const handleShareQuote = async (quoteData) => {
@@ -1887,6 +1925,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
             { id: 'second', label: 'Home Equity' },
             { id: 'income', label: 'Income' },
             { id: 'saved', label: 'Saved' },
+            { id: 'notifications', label: '🔔 Activity' },
             { id: 'admin', label: '⚙ Admin' }
           ].map(tab => (
             <button
@@ -1955,26 +1994,112 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>🔔</div>
                     <div style={{ fontSize: '14px' }}>No new notifications</div>
                     <div style={{ fontSize: '12px', marginTop: '4px' }}>You'll be notified when clients view their quotes</div>
+                    <button
+                      onClick={() => {
+                        setActiveTab('notifications');
+                        setShowNotifications(false);
+                      }}
+                      style={{
+                        marginTop: '12px',
+                        padding: '8px 16px',
+                        background: '#7B2CBF',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        fontWeight: '600'
+                      }}
+                    >
+                      View All Activity
+                    </button>
                   </div>
                 ) : (
-                  notifications.map(notif => (
+                  <>
+                    {notifications.slice(0, 5).map(notif => (
+                      <div 
+                        key={notif.id} 
+                        style={{ 
+                          padding: '12px 16px', 
+                          borderBottom: '1px solid #eee',
+                          background: '#fafafa'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+                          <div style={{ fontWeight: '600', fontSize: '13px' }}>
+                            {notif.quotes?.client_name || 'Client'}
+                          </div>
+                          <span style={{ fontSize: '10px', color: '#888' }}>
+                            {new Date(notif.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
+                          Viewed: {notif.quotes?.label || 'Quote'}
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          {notif.quotes?.share_id && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Load the quote
+                                const quote = dbQuotes.find(q => q.id === notif.quotes.id);
+                                if (quote) {
+                                  loadSavedQuote(quote);
+                                  setShowNotifications(false);
+                                }
+                              }}
+                              style={{
+                                padding: '4px 8px',
+                                fontSize: '10px',
+                                background: '#7B2CBF',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              View Quote
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMarkNotificationRead(notif.id);
+                            }}
+                            style={{
+                              padding: '4px 8px',
+                              fontSize: '10px',
+                              background: '#e0e0e0',
+                              color: '#666',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {/* View All Button */}
                     <div 
-                      key={notif.id} 
                       style={{ 
                         padding: '12px 16px', 
-                        borderBottom: '1px solid #eee',
-                        cursor: 'pointer'
+                        textAlign: 'center',
+                        borderTop: '1px solid #eee',
+                        cursor: 'pointer',
+                        color: '#7B2CBF',
+                        fontWeight: '600',
+                        fontSize: '13px'
                       }}
-                      onClick={() => handleMarkNotificationRead(notif.id)}
+                      onClick={() => {
+                        setActiveTab('notifications');
+                        setShowNotifications(false);
+                      }}
                     >
-                      <div style={{ fontWeight: '600', fontSize: '13px', marginBottom: '4px' }}>
-                        {notif.title}
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#666' }}>
-                        {notif.message}
-                      </div>
+                      View All Activity →
                     </div>
-                  ))
+                  </>
                 )}
               </div>
             )}
@@ -4347,6 +4472,288 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   );
                 })()}
               </>
+            )}
+          </div>
+        )}
+
+        {/* ================================================================ */}
+        {/* NOTIFICATIONS TAB - Activity History */}
+        {/* ================================================================ */}
+        {activeTab === 'notifications' && (
+          <div className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <div>
+                <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '4px' }}>🔔 Client Activity</h2>
+                <p style={{ color: '#666', fontSize: '13px' }}>
+                  Track when clients view your quotes and click Apply
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {['all', 'unread', 'applied', 'reviewed'].map(filter => (
+                  <button
+                    key={filter}
+                    onClick={() => setNotificationFilter(filter)}
+                    className={`btn-secondary ${notificationFilter === filter ? 'active' : ''}`}
+                    style={{ padding: '8px 16px', fontSize: '12px', textTransform: 'capitalize' }}
+                  >
+                    {filter === 'applied' ? '🎯 Applied' : filter}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {loadingAllNotifications ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
+                Loading activity...
+              </div>
+            ) : allNotifications.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px', color: '#888' }}>
+                <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
+                <div style={{ fontSize: '16px', fontWeight: '600', marginBottom: '8px' }}>No activity yet</div>
+                <div style={{ fontSize: '13px' }}>
+                  When clients view your shared quotes, you'll see their activity here
+                </div>
+              </div>
+            ) : (
+              <div style={{ border: '1px solid #e0e0e0', borderRadius: '12px', overflow: 'hidden' }}>
+                {/* Table Header */}
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: '1fr 1.5fr 120px 100px 100px 140px',
+                  background: '#f8f8f8',
+                  padding: '12px 16px',
+                  fontWeight: '600',
+                  fontSize: '12px',
+                  color: '#666',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  borderBottom: '1px solid #e0e0e0'
+                }}>
+                  <div>Client</div>
+                  <div>Quote</div>
+                  <div>Action</div>
+                  <div>Date</div>
+                  <div>Status</div>
+                  <div>Actions</div>
+                </div>
+                
+                {/* Table Body */}
+                {allNotifications
+                  .filter(notif => {
+                    if (notificationFilter === 'all') return true;
+                    if (notificationFilter === 'unread') return !notif.is_read;
+                    if (notificationFilter === 'applied') return notif.quote_views?.clicked_apply;
+                    if (notificationFilter === 'reviewed') return notif.reviewed;
+                    return true;
+                  })
+                  .map(notif => {
+                    const isApplied = notif.quote_views?.clicked_apply;
+                    const isNew = !notif.is_read;
+                    
+                    return (
+                      <div 
+                        key={notif.id}
+                        style={{ 
+                          display: 'grid', 
+                          gridTemplateColumns: '1fr 1.5fr 120px 100px 100px 140px',
+                          padding: '14px 16px',
+                          borderBottom: '1px solid #f0f0f0',
+                          alignItems: 'center',
+                          background: isNew ? '#faf5ff' : isApplied ? '#f0fdf4' : 'white',
+                          transition: 'background 0.2s'
+                        }}
+                      >
+                        {/* Client Name */}
+                        <div>
+                          <div style={{ fontWeight: '600', fontSize: '14px' }}>
+                            {notif.quotes?.client_name || 'Unknown'}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#888' }}>
+                            {notif.quote_views?.device_type || 'Unknown device'}
+                          </div>
+                        </div>
+                        
+                        {/* Quote Label */}
+                        <div>
+                          <div style={{ fontSize: '13px', color: '#333' }}>
+                            {notif.quotes?.label || 'Quote'}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#888' }}>
+                            {notif.quotes?.quote_type === 'home_equity' ? 'Home Equity' : 'Purchase/Refi'}
+                          </div>
+                        </div>
+                        
+                        {/* Action Type */}
+                        <div>
+                          {isApplied ? (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '4px 10px',
+                              background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                              color: 'white',
+                              borderRadius: '20px',
+                              fontSize: '11px',
+                              fontWeight: '600'
+                            }}>
+                              🎯 Applied!
+                            </span>
+                          ) : (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '4px 10px',
+                              background: '#e0e7ff',
+                              color: '#4338ca',
+                              borderRadius: '20px',
+                              fontSize: '11px',
+                              fontWeight: '600'
+                            }}>
+                              👁 Viewed
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Date */}
+                        <div style={{ fontSize: '12px', color: '#666' }}>
+                          {new Date(notif.created_at).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit'
+                          })}
+                        </div>
+                        
+                        {/* Status */}
+                        <div>
+                          {notif.reviewed ? (
+                            <span style={{
+                              padding: '4px 8px',
+                              background: '#f0f0f0',
+                              color: '#666',
+                              borderRadius: '4px',
+                              fontSize: '11px'
+                            }}>
+                              ✓ Reviewed
+                            </span>
+                          ) : isNew ? (
+                            <span style={{
+                              padding: '4px 8px',
+                              background: '#7B2CBF',
+                              color: 'white',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: '600'
+                            }}>
+                              NEW
+                            </span>
+                          ) : (
+                            <span style={{
+                              padding: '4px 8px',
+                              background: '#fef3c7',
+                              color: '#92400e',
+                              borderRadius: '4px',
+                              fontSize: '11px'
+                            }}>
+                              Pending
+                            </span>
+                          )}
+                        </div>
+                        
+                        {/* Actions */}
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            onClick={() => {
+                              const quote = dbQuotes.find(q => q.id === notif.quotes?.id);
+                              if (quote) {
+                                loadSavedQuote(quote);
+                              } else {
+                                alert('Quote not found in saved quotes');
+                              }
+                            }}
+                            style={{
+                              padding: '6px 10px',
+                              fontSize: '11px',
+                              background: '#7B2CBF',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontWeight: '500'
+                            }}
+                          >
+                            View
+                          </button>
+                          <button
+                            onClick={() => handleMarkNotificationReviewed(notif.id, !notif.reviewed)}
+                            style={{
+                              padding: '6px 10px',
+                              fontSize: '11px',
+                              background: notif.reviewed ? '#f0f0f0' : '#e0e7ff',
+                              color: notif.reviewed ? '#666' : '#4338ca',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontWeight: '500'
+                            }}
+                          >
+                            {notif.reviewed ? 'Unmark' : '✓ Mark'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                
+                {/* Empty State for Filtered Results */}
+                {allNotifications.filter(notif => {
+                  if (notificationFilter === 'all') return true;
+                  if (notificationFilter === 'unread') return !notif.is_read;
+                  if (notificationFilter === 'applied') return notif.quote_views?.clicked_apply;
+                  if (notificationFilter === 'reviewed') return notif.reviewed;
+                  return true;
+                }).length === 0 && (
+                  <div style={{ padding: '40px', textAlign: 'center', color: '#888' }}>
+                    No {notificationFilter} notifications
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Summary Stats */}
+            {allNotifications.length > 0 && (
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(4, 1fr)', 
+                gap: '16px', 
+                marginTop: '24px' 
+              }}>
+                <div style={{ background: '#f8f8f8', padding: '16px', borderRadius: '10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#7B2CBF' }}>
+                    {allNotifications.length}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#888' }}>Total Views</div>
+                </div>
+                <div style={{ background: '#f0fdf4', padding: '16px', borderRadius: '10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#22c55e' }}>
+                    {allNotifications.filter(n => n.quote_views?.clicked_apply).length}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#888' }}>Applied</div>
+                </div>
+                <div style={{ background: '#faf5ff', padding: '16px', borderRadius: '10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#7B2CBF' }}>
+                    {allNotifications.filter(n => !n.is_read).length}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#888' }}>New</div>
+                </div>
+                <div style={{ background: '#f8f8f8', padding: '16px', borderRadius: '10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#666' }}>
+                    {allNotifications.filter(n => n.reviewed).length}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#888' }}>Reviewed</div>
+                </div>
+              </div>
             )}
           </div>
         )}
