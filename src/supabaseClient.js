@@ -1,5 +1,5 @@
 // ============================================================================
-// SUPABASE CLIENT CONFIGURATION 12/27/25 12:33am
+// SUPABASE CLIENT CONFIGURATION V3
 // CDM Quote Pro - Database Connection
 // ============================================================================
 
@@ -321,6 +321,33 @@ export async function updateLoanOfficerProfile(id, updates) {
 
   if (error) {
     console.error('Error updating loan officer:', error);
+    throw error;
+  }
+
+  return data;
+}
+
+/**
+ * Update a loan officer by email (for admin bulk updates)
+ */
+export async function updateLoanOfficerByEmail(email, updates) {
+  const { data, error } = await supabase
+    .from('loan_officers')
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('email', email.toLowerCase())
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      // No rows found - email not in database
+      console.warn('Loan officer not found:', email);
+      return null;
+    }
+    console.error('Error updating loan officer by email:', error);
     throw error;
   }
 
