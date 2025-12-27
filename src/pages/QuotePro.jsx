@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnreadNotifications, subscribeToNotifications, markNotificationRead } from '../supabaseClient';
+import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnreadNotifications, subscribeToNotifications, markNotificationRead, updateLoanOfficerProfile, updateLoanOfficerByEmail } from '../supabaseClient';
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V9
+// CDM QUOTE PRO - Main Application V13
 // ============================================================================
 
 // ============================================================================
@@ -1052,6 +1052,123 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
 
   // Handlers
   const handleClientChange = (field, value) => setClientInfo(prev => ({ ...prev, [field]: value }));
+  
+  // Profile editing state
+  const [profileEdits, setProfileEdits] = useState({});
+  const [savingProfile, setSavingProfile] = useState(false);
+  
+  // CSV Upload state (Admin tools)
+  const [csvUploadData, setCsvUploadData] = useState([]);
+  const [csvUploading, setCsvUploading] = useState(false);
+  const [csvUploadResults, setCsvUploadResults] = useState(null);
+  
+  // Handle CSV file upload
+  const handleCsvUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target.result;
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      // Skip header row if present
+      const startIndex = lines[0].toLowerCase().includes('email') ? 1 : 0;
+      
+      const data = [];
+      for (let i = startIndex; i < lines.length; i++) {
+        const parts = lines[i].split(',').map(p => p.trim().replace(/^["']|["']$/g, ''));
+        if (parts.length >= 2 && parts[0] && parts[1]) {
+          data.push({
+            email: parts[0],
+            application_url: parts[1]
+          });
+        }
+      }
+      
+      setCsvUploadData(data);
+      setCsvUploadResults(null);
+    };
+    reader.readAsText(file);
+    
+    // Reset input so same file can be uploaded again
+    e.target.value = '';
+  };
+  
+  // Apply CSV updates to database
+  const applyCsvUpdates = async () => {
+    if (csvUploadData.length === 0) return;
+    
+    setCsvUploading(true);
+    setCsvUploadResults(null);
+    
+    let success = 0;
+    let errors = 0;
+    let notFound = 0;
+    
+    for (const row of csvUploadData) {
+      try {
+        const result = await updateLoanOfficerByEmail(row.email, { application_url: row.application_url });
+        if (result) {
+          success++;
+        } else {
+          notFound++;
+        }
+      } catch (err) {
+        console.error('Error updating', row.email, err);
+        errors++;
+      }
+    }
+    
+    setCsvUploading(false);
+    setCsvUploadResults({ success, errors, notFound });
+    
+    if (success > 0) {
+      setCsvUploadData([]);
+    }
+  };
+  
+  // Download sample CSV
+  const downloadSampleCsv = () => {
+    const sample = 'email,application_url\njohn@example.com,https://apply.yoursite.com/john\nsarah@example.com,https://apply.yoursite.com/sarah';
+    const blob = new Blob([sample], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'lo_application_urls_template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  
+  // Get current profile value (edited or original)
+  const getProfileValue = (field) => {
+    if (profileEdits[field] !== undefined) return profileEdits[field];
+    return loanOfficer?.[field] || '';
+  };
+  
+  // Handle profile field changes
+  const handleProfileUpdate = (field, value) => {
+    setProfileEdits(prev => ({ ...prev, [field]: value }));
+  };
+  
+  // Save profile to database
+  const saveProfile = async () => {
+    if (!loanOfficer?.id || Object.keys(profileEdits).length === 0) return;
+    
+    setSavingProfile(true);
+    try {
+      await updateLoanOfficerProfile(loanOfficer.id, profileEdits);
+      // Update local state by merging edits
+      Object.assign(loanOfficer, profileEdits);
+      setProfileEdits({});
+      alert('Profile saved successfully!');
+    } catch (err) {
+      console.error('Error saving profile:', err);
+      alert('Failed to save profile. Please try again.');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
   const handlePropertyChange = (field, value) => {
     const numValue = parseFloat(value) || 0;
     setPropertyDetails(prev => ({ ...prev, [field]: numValue }));
@@ -4085,8 +4202,129 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
         {/* ================================================================ */}
         {activeTab === 'admin' && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-            {/* Left Column - Default Fees */}
+            {/* Left Column - Profile + Default Fees */}
             <div>
+              {/* LO Profile Section */}
+              <div className="card" style={{ marginBottom: '20px' }}>
+                <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '20px' }}>
+                  👤 Loan Officer Profile
+                </h2>
+                <p style={{ fontSize: '13px', color: '#666', marginBottom: '20px' }}>
+                  Your profile information appears on consumer quote pages.
+                </p>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                  <div>
+                    <label className="label">Full Name</label>
+                    <input 
+                      type="text"
+                      value={getProfileValue('full_name')}
+                      onChange={(e) => handleProfileUpdate('full_name', e.target.value)}
+                      placeholder="Your full name"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Title</label>
+                    <input 
+                      type="text"
+                      value={getProfileValue('title')}
+                      onChange={(e) => handleProfileUpdate('title', e.target.value)}
+                      placeholder="e.g., Senior Loan Officer"
+                    />
+                  </div>
+                </div>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                  <div>
+                    <label className="label">Email</label>
+                    <input 
+                      type="email"
+                      value={getProfileValue('email')}
+                      onChange={(e) => handleProfileUpdate('email', e.target.value)}
+                      placeholder="your@email.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Phone</label>
+                    <input 
+                      type="tel"
+                      value={getProfileValue('phone')}
+                      onChange={(e) => handleProfileUpdate('phone', e.target.value)}
+                      placeholder="(555) 123-4567"
+                    />
+                  </div>
+                </div>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                  <div>
+                    <label className="label">NMLS Number</label>
+                    <input 
+                      type="text"
+                      value={getProfileValue('nmls_number')}
+                      onChange={(e) => handleProfileUpdate('nmls_number', e.target.value)}
+                      placeholder="123456"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Photo URL (optional)</label>
+                    <input 
+                      type="url"
+                      value={getProfileValue('photo_url')}
+                      onChange={(e) => handleProfileUpdate('photo_url', e.target.value)}
+                      placeholder="https://..."
+                    />
+                  </div>
+                </div>
+                
+                <div style={{ marginBottom: '16px' }}>
+                  <label className="label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    Application URL
+                    <span style={{ 
+                      background: '#666', 
+                      color: 'white', 
+                      fontSize: '10px', 
+                      padding: '2px 6px', 
+                      borderRadius: '4px',
+                      fontWeight: '600'
+                    }}>
+                      MANAGED BY ADMIN
+                    </span>
+                  </label>
+                  <input 
+                    type="url"
+                    value={loanOfficer?.application_url || ''}
+                    readOnly
+                    disabled
+                    placeholder="Not set - contact admin"
+                    style={{ 
+                      background: '#f5f5f5', 
+                      color: '#666',
+                      cursor: 'not-allowed',
+                      borderColor: loanOfficer?.application_url ? '#22c55e' : '#e0e0e0'
+                    }}
+                  />
+                  <p style={{ fontSize: '11px', color: '#666', marginTop: '6px' }}>
+                    {loanOfficer?.application_url 
+                      ? '✅ Your application link is configured and active.'
+                      : '⚠️ Application link not configured yet. Contact your administrator.'}
+                  </p>
+                </div>
+                
+                <button 
+                  onClick={saveProfile}
+                  className="btn-primary"
+                  style={{ width: '100%', marginTop: '8px' }}
+                  disabled={savingProfile || Object.keys(profileEdits).length === 0}
+                >
+                  {savingProfile ? '⏳ Saving...' : '💾 Save Profile'}
+                </button>
+                {Object.keys(profileEdits).length > 0 && (
+                  <p style={{ fontSize: '11px', color: '#7B2CBF', marginTop: '8px', textAlign: 'center' }}>
+                    You have unsaved changes
+                  </p>
+                )}
+              </div>
+              
               <div className="card" style={{ marginBottom: '20px' }}>
                 <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '20px' }}>Fee Templates</h2>
                 <p style={{ fontSize: '13px', color: '#666', marginBottom: '20px' }}>
@@ -4327,8 +4565,151 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
               </div>
             </div>
             
-            {/* Right Column - State Lookup Tables */}
+            {/* Right Column - Admin Tools + State Lookup Tables */}
             <div>
+              {/* Admin Tools - LO Management (Only visible to admin) */}
+              {loanOfficer?.email === 'ramon@clientdirectmtg.com' && (
+              <div className="card" style={{ marginBottom: '20px', border: '2px solid #7B2CBF' }}>
+                <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  🔧 Admin Tools
+                  <span style={{ 
+                    background: '#7B2CBF', 
+                    color: 'white', 
+                    fontSize: '10px', 
+                    padding: '3px 8px', 
+                    borderRadius: '4px',
+                    fontWeight: '600'
+                  }}>
+                    ADMIN ONLY
+                  </span>
+                </h2>
+                <p style={{ fontSize: '13px', color: '#666', marginBottom: '20px' }}>
+                  Bulk manage loan officer settings.
+                </p>
+                
+                {/* CSV Upload Section */}
+                <div style={{ 
+                  border: '2px dashed #7B2CBF', 
+                  borderRadius: '12px', 
+                  padding: '24px', 
+                  textAlign: 'center',
+                  background: csvUploadData.length > 0 ? '#7B2CBF08' : '#f9f9f9',
+                  marginBottom: '16px'
+                }}>
+                  <input 
+                    type="file" 
+                    accept=".csv"
+                    id="csv-upload"
+                    style={{ display: 'none' }}
+                    onChange={handleCsvUpload}
+                  />
+                  <label 
+                    htmlFor="csv-upload" 
+                    style={{ cursor: 'pointer', display: 'block' }}
+                  >
+                    <div style={{ fontSize: '32px', marginBottom: '8px' }}>📤</div>
+                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>
+                      {csvUploadData.length > 0 
+                        ? `${csvUploadData.length} records loaded`
+                        : 'Upload LO Application URLs'}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#666' }}>
+                      CSV format: email, application_url
+                    </div>
+                  </label>
+                </div>
+                
+                {/* CSV Preview */}
+                {csvUploadData.length > 0 && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ 
+                      maxHeight: '200px', 
+                      overflow: 'auto', 
+                      border: '1px solid #e0e0e0', 
+                      borderRadius: '8px',
+                      fontSize: '12px'
+                    }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: '#f5f5f5', position: 'sticky', top: 0 }}>
+                            <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e0e0e0' }}>Email</th>
+                            <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e0e0e0' }}>Application URL</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {csvUploadData.map((row, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                              <td style={{ padding: '8px 12px' }}>{row.email}</td>
+                              <td style={{ padding: '8px 12px', color: '#7B2CBF', wordBreak: 'break-all' }}>
+                                {row.application_url?.substring(0, 40)}{row.application_url?.length > 40 ? '...' : ''}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+                      <button 
+                        onClick={applyCsvUpdates}
+                        className="btn-primary"
+                        style={{ flex: 1 }}
+                        disabled={csvUploading}
+                      >
+                        {csvUploading ? '⏳ Updating...' : `✅ Apply ${csvUploadData.length} Updates`}
+                      </button>
+                      <button 
+                        onClick={() => setCsvUploadData([])}
+                        className="btn-secondary"
+                      >
+                        ✕ Clear
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Upload Results */}
+                {csvUploadResults && (
+                  <div style={{ 
+                    padding: '12px', 
+                    borderRadius: '8px', 
+                    background: csvUploadResults.errors > 0 ? '#fef2f2' : '#f0fdf4',
+                    border: `1px solid ${csvUploadResults.errors > 0 ? '#fecaca' : '#bbf7d0'}`,
+                    fontSize: '13px'
+                  }}>
+                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>
+                      {csvUploadResults.errors > 0 ? '⚠️ Completed with errors' : '✅ Update complete!'}
+                    </div>
+                    <div>✓ {csvUploadResults.success} updated successfully</div>
+                    {csvUploadResults.errors > 0 && (
+                      <div style={{ color: '#dc2626' }}>✕ {csvUploadResults.errors} failed</div>
+                    )}
+                    {csvUploadResults.notFound > 0 && (
+                      <div style={{ color: '#f59e0b' }}>? {csvUploadResults.notFound} emails not found</div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Sample CSV Download */}
+                <button 
+                  onClick={downloadSampleCsv}
+                  style={{ 
+                    width: '100%', 
+                    marginTop: '16px',
+                    padding: '10px',
+                    background: 'transparent',
+                    border: '1px solid #e0e0e0',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    color: '#666'
+                  }}
+                >
+                  📥 Download Sample CSV Template
+                </button>
+              </div>
+              )}
+              
               <div className="card">
                 <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '20px' }}>State Lookup Tables</h2>
                 <p style={{ fontSize: '13px', color: '#666', marginBottom: '20px' }}>
