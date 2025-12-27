@@ -1,5 +1,5 @@
 // ============================================================================
-// SUPABASE CLIENT CONFIGURATION V5
+// SUPABASE CLIENT CONFIGURATION V6
 // CDM Quote Pro - Database Connection
 // ============================================================================
 
@@ -266,12 +266,6 @@ export async function getAllNotifications(loanOfficerId, limit = 100) {
         label,
         quote_type,
         quote_data,
-        created_at
-      ),
-      quote_views (
-        id,
-        clicked_apply,
-        device_type,
         created_at
       )
     `)
