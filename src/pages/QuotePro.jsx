@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V5
+// CDM QUOTE PRO - Main Application V6
 // ============================================================================
 
 // ============================================================================
@@ -2276,6 +2276,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   >
                     <span>📤</span> Share Quote
                   </button>
+                  <button className="btn-secondary" onClick={() => setActiveTab('rates')}>Edit Rates</button>
                 </div>
               </div>
               
@@ -3102,6 +3103,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   >
                     <span>📤</span> Share Quote
                   </button>
+                  <button className="btn-secondary" onClick={() => setHomeEquityView('editRates')}>Edit Rates</button>
                 </div>
               </div>
               
