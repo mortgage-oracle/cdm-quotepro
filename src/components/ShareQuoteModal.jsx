@@ -1,5 +1,5 @@
 // ============================================================================
-// SHARE QUOTE MODAL
+// SHARE QUOTE MODAL V2
 // Modal for loan officers to share quotes with consumers
 // ============================================================================
 
@@ -17,7 +17,8 @@ const ShareQuoteModal = ({
   const [copied, setCopied] = useState(false);
   const [expiryDays, setExpiryDays] = useState(7);
   
-  const clientName = quote?.clientInfo?.name || 'Client';
+  // Handle both direct quote and database quote structures
+  const clientName = quote?.client_name || quote?.clientInfo?.name || quote?.quote_data?.clientInfo?.name || 'Client';
   const clientFirstName = clientName.split(' ')[0];
   const loFirstName = loanOfficer?.full_name?.split(' ')[0] || 'Your Loan Officer';
   
@@ -55,12 +56,14 @@ NMLS# ${loanOfficer?.nmls_number || ''}`;
   };
   
   const openEmailClient = () => {
-    const mailtoLink = `mailto:${quote?.clientInfo?.email || ''}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+    const clientEmail = quote?.client_email || quote?.clientInfo?.email || quote?.quote_data?.clientInfo?.email || '';
+    const mailtoLink = `mailto:${clientEmail}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
     window.location.href = mailtoLink;
   };
   
   const openSMS = () => {
-    const phone = quote?.clientInfo?.phone?.replace(/\D/g, '') || '';
+    const clientPhone = quote?.client_phone || quote?.clientInfo?.phone || quote?.quote_data?.clientInfo?.phone || '';
+    const phone = clientPhone.replace(/\D/g, '');
     const smsLink = `sms:${phone}?body=${encodeURIComponent(textMessage)}`;
     window.location.href = smsLink;
   };
