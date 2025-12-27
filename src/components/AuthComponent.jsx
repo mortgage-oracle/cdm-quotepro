@@ -39,18 +39,29 @@ const AuthComponent = ({ onAuthSuccess }) => {
     setError(null);
 
     try {
+      console.log('Attempting login...');
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
 
       if (error) throw error;
+      console.log('Auth successful, fetching LO profile...');
 
-      const { data: lo, error: loError } = await supabase
+      // Add timeout for LO query
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Database query timeout')), 5000)
+      );
+
+      const loQueryPromise = supabase
         .from('loan_officers')
         .select('*')
         .eq('email', email)
         .single();
+
+      const { data: lo, error: loError } = await Promise.race([loQueryPromise, timeoutPromise]);
+
+      console.log('LO query result:', lo, loError);
 
       if (loError || !lo) {
         setError('No loan officer profile found. Please contact your administrator.');
@@ -64,9 +75,11 @@ const AuthComponent = ({ onAuthSuccess }) => {
         return;
       }
 
+      console.log('Login complete, calling onAuthSuccess');
       onAuthSuccess(data.user, lo);
 
     } catch (err) {
+      console.error('Login error:', err);
       setError(err.message || 'Login failed.');
     } finally {
       setLoading(false);
