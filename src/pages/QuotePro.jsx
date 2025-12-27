@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V15
+// CDM QUOTE PRO - Main Application V16
 // ============================================================================
 
 // ============================================================================
@@ -4946,6 +4946,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
           (feeOverrides.floodCert !== undefined ? feeOverrides.floodCert : feeTemplates.floodCert) +
           (feeOverrides.processing !== undefined ? feeOverrides.processing : feeTemplates.processing) +
           (feeOverrides.taxService !== undefined ? feeOverrides.taxService : feeTemplates.taxService) +
+          (calc.closingUpfrontFee || 0) +
           (feeOverrides.lendersTitle !== undefined ? feeOverrides.lendersTitle : (titleInsuranceRates[clientInfo.state] || 2.5) * (calc.totalLoanAmount / 1000)) +
           (feeOverrides.notaryFee !== undefined ? feeOverrides.notaryFee : feeTemplates.notaryFee) +
           (feeOverrides.recordingServiceFee !== undefined ? feeOverrides.recordingServiceFee : feeTemplates.recordingServiceFee) +
@@ -5055,7 +5056,8 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                       (feeOverrides.creditReport !== undefined ? feeOverrides.creditReport : feeTemplates.creditReport) +
                       (feeOverrides.floodCert !== undefined ? feeOverrides.floodCert : feeTemplates.floodCert) +
                       (feeOverrides.processing !== undefined ? feeOverrides.processing : feeTemplates.processing) +
-                      (feeOverrides.taxService !== undefined ? feeOverrides.taxService : feeTemplates.taxService)
+                      (feeOverrides.taxService !== undefined ? feeOverrides.taxService : feeTemplates.taxService) +
+                      (calc.closingUpfrontFee || 0)
                     )}</span>
                   </div>
                   <div style={{ paddingLeft: '12px', fontSize: '13px' }}>
@@ -5094,6 +5096,44 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                       overrides={feeOverrides}
                       setOverrides={setFeeOverrides}
                     />
+                    {/* VA Funding Fee or FHA UFMIP - show in Section B */}
+                    {calc.upfrontFee > 0 && (
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center',
+                        padding: '6px 0', 
+                        marginTop: '4px',
+                        borderTop: '1px dashed #ddd',
+                        color: calc.upfrontFeeFinanced ? '#7B2CBF' : '#1a1a1a',
+                        fontWeight: '600'
+                      }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {calc.upfrontFeeLabel}
+                          {calc.upfrontFeeFinanced && (
+                            <span style={{ 
+                              background: '#7B2CBF', 
+                              color: 'white', 
+                              padding: '2px 6px', 
+                              borderRadius: '4px', 
+                              fontSize: '9px',
+                              textTransform: 'uppercase'
+                            }}>
+                              Financed
+                            </span>
+                          )}
+                        </span>
+                        <span className="mono">
+                          {calc.upfrontFeeFinanced ? (
+                            <span style={{ color: '#888', fontStyle: 'italic' }}>
+                              {formatCurrency(calc.upfrontFee)} → Loan
+                            </span>
+                          ) : (
+                            formatCurrency(calc.upfrontFee)
+                          )}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
                 
@@ -5157,6 +5197,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                     (feeOverrides.floodCert !== undefined ? feeOverrides.floodCert : feeTemplates.floodCert) +
                     (feeOverrides.processing !== undefined ? feeOverrides.processing : feeTemplates.processing) +
                     (feeOverrides.taxService !== undefined ? feeOverrides.taxService : feeTemplates.taxService) +
+                    (calc.closingUpfrontFee || 0) +
                     (feeOverrides.lendersTitle !== undefined ? feeOverrides.lendersTitle : (titleInsuranceRates[clientInfo.state] || 2.5) * (calc.totalLoanAmount / 1000)) +
                     (feeOverrides.notaryFee !== undefined ? feeOverrides.notaryFee : feeTemplates.notaryFee) +
                     (feeOverrides.recordingServiceFee !== undefined ? feeOverrides.recordingServiceFee : feeTemplates.recordingServiceFee) +
