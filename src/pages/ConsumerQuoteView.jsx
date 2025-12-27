@@ -1,5 +1,5 @@
 // ============================================================================
-// CONSUMER QUOTE VIEW PAGE V7
+// CONSUMER QUOTE VIEW PAGE V9
 // What borrowers see when they click their unique quote link
 // ============================================================================
 
@@ -16,21 +16,51 @@ const ConsumerQuoteView = () => {
   const [expandedOption, setExpandedOption] = useState(null);
 
   useEffect(() => {
-    loadQuote();
+    if (shareId) {
+      loadQuote();
+    } else {
+      setError('Invalid quote link.');
+      setLoading(false);
+    }
   }, [shareId]);
 
   const loadQuote = async () => {
+    console.log('Loading quote for shareId:', shareId);
+    
+    // Set a timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      console.log('Quote load timeout');
+      setError('Quote is taking too long to load. Please refresh the page.');
+      setLoading(false);
+    }, 15000);
+    
     try {
       const data = await getQuoteByShareId(shareId);
+      clearTimeout(timeout);
+      
+      console.log('Quote loaded:', data);
+      
+      if (!data) {
+        setError('Quote not found.');
+        setLoading(false);
+        return;
+      }
+      
       setQuote(data);
       
-      // Record the view
-      const view = await recordQuoteView(data.id);
-      setViewId(view.id);
+      // Record the view (don't let this block the UI)
+      try {
+        const view = await recordQuoteView(data.id);
+        if (view?.id) setViewId(view.id);
+      } catch (viewErr) {
+        console.warn('Could not record view:', viewErr);
+      }
+      
+      setLoading(false);
     } catch (err) {
+      clearTimeout(timeout);
       console.error('Error loading quote:', err);
       setError('Quote not found or has expired.');
-    } finally {
       setLoading(false);
     }
   };
@@ -77,7 +107,7 @@ const ConsumerQuoteView = () => {
         fontFamily: "'Outfit', sans-serif"
       }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ 
+          <div style={{
             width: '48px', 
             height: '48px', 
             border: '3px solid rgba(123,44,191,0.3)', 
@@ -87,6 +117,21 @@ const ConsumerQuoteView = () => {
             margin: '0 auto 16px'
           }} />
           <div style={{ color: '#666' }}>Loading your quote...</div>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              marginTop: '24px',
+              padding: '10px 20px',
+              background: 'transparent',
+              border: '1px solid #ccc',
+              borderRadius: '8px',
+              color: '#888',
+              fontSize: '13px',
+              cursor: 'pointer'
+            }}
+          >
+            Taking too long? Click to refresh
+          </button>
           <style>{`@keyframes spin { to { transform: rotate(360deg); }}`}</style>
         </div>
       </div>
@@ -116,8 +161,68 @@ const ConsumerQuoteView = () => {
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>😕</div>
           <h2 style={{ fontSize: '20px', marginBottom: '8px' }}>Quote Not Found</h2>
           <p style={{ color: '#666', fontSize: '14px' }}>
-            This quote may have expired or the link is invalid. Please contact your loan officer for a new quote.
+            {error}
           </p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              marginTop: '20px',
+              padding: '10px 24px',
+              background: '#7B2CBF',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Safety check - if no quote data yet
+  if (!quote || !quote.quote_data) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(180deg, #f5f5f5 0%, #e8e8e8 100%)',
+        fontFamily: "'Outfit', sans-serif",
+        padding: '20px'
+      }}>
+        <div style={{ 
+          textAlign: 'center', 
+          background: 'white',
+          padding: '40px',
+          borderRadius: '20px',
+          maxWidth: '400px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>😕</div>
+          <h2 style={{ fontSize: '20px', marginBottom: '8px' }}>Quote Not Available</h2>
+          <p style={{ color: '#666', fontSize: '14px' }}>
+            Unable to load quote data. Please contact your loan officer.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              marginTop: '20px',
+              padding: '10px 24px',
+              background: '#7B2CBF',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            Try Again
+          </button>
         </div>
       </div>
     );
@@ -617,8 +722,30 @@ const ConsumerQuoteView = () => {
                               <span>Tax Service Fee</span>
                               <span>{formatCurrency(option.feeBreakdown?.sectionB?.taxService || 0)}</span>
                             </div>
+                            {/* Upfront Government Fee (FHA UFMIP or VA Funding Fee) - if paid at closing */}
+                            {option.feeBreakdown?.sectionB?.upfrontFee > 0 && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', color: '#7B2CBF', fontWeight: '600' }}>
+                                <span>{option.feeBreakdown?.sectionB?.upfrontFeeLabel || 'Gov\'t Fee'}</span>
+                                <span>{formatCurrency(option.feeBreakdown.sectionB.upfrontFee)}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
+                        
+                        {/* Financed Upfront Fee Notice */}
+                        {option.feeBreakdown?.financedUpfrontFee > 0 && (
+                          <div style={{ 
+                            background: '#f3e8ff', 
+                            border: '1px solid #7B2CBF', 
+                            borderRadius: '6px', 
+                            padding: '8px 12px', 
+                            marginBottom: '12px',
+                            fontSize: '12px',
+                            color: '#5b21b6'
+                          }}>
+                            <strong>{option.feeBreakdown.upfrontFeeLabel}:</strong> {formatCurrency(option.feeBreakdown.upfrontFee)} financed into loan amount
+                          </div>
+                        )}
                         
                         {/* Section C */}
                         <div style={{ marginBottom: '12px' }}>
