@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V6
+// CDM QUOTE PRO - Main Application V7
 // ============================================================================
 
 // ============================================================================
@@ -2252,21 +2252,117 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   <button className="btn-secondary" onClick={openSaveModal}>Save Quote</button>
                   <button 
                     className="btn-primary" 
-                    onClick={() => handleShareQuote({
-                      label: quoteLabel || `Quote for ${clientInfo.name || 'Client'}`,
-                      baseLoanAmount,
-                      loanProgram,
-                      loanPurpose,
-                      term,
-                      creditScore,
-                      rateType,
-                      armConfig,
-                      propertyDetails,
-                      calculations: calculations.slice(0, 3).map((calc, i) => ({
-                        ...calc,
-                        isRecommended: recommendedQuote === i
-                      }))
-                    })}
+                    onClick={() => {
+                      // Calculate detailed fees for each option
+                      const detailedCalcs = calculations.slice(0, 3).map((calc, i) => {
+                        const lendersTitle = (titleInsuranceRates[clientInfo.state] || 2.5) * (calc.totalLoanAmount / 1000);
+                        const recordingFee = recordingFees[clientInfo.state] || 115;
+                        const transferTax = (transferTaxRates[clientInfo.state] || 0) * (propertyValue / 1000);
+                        
+                        // Section A
+                        const sectionA = {
+                          pointsCost: calc.pointsCost > 0 ? calc.pointsCost : 0,
+                          adminFee: feeTemplates.adminFee,
+                          underwritingFee: feeTemplates.underwritingFee,
+                          total: (calc.pointsCost > 0 ? calc.pointsCost : 0) + feeTemplates.adminFee + feeTemplates.underwritingFee
+                        };
+                        
+                        // Section B
+                        const sectionB = {
+                          appraisal: feeTemplates.appraisal,
+                          creditReport: feeTemplates.creditReport,
+                          floodCert: feeTemplates.floodCert,
+                          processing: feeTemplates.processing,
+                          taxService: feeTemplates.taxService,
+                          total: feeTemplates.appraisal + feeTemplates.creditReport + feeTemplates.floodCert + feeTemplates.processing + feeTemplates.taxService
+                        };
+                        
+                        // Section C
+                        const sectionC = {
+                          lendersTitle,
+                          notaryFee: feeTemplates.notaryFee,
+                          recordingServiceFee: feeTemplates.recordingServiceFee,
+                          settlementFee: feeTemplates.settlementFee,
+                          total: lendersTitle + feeTemplates.notaryFee + feeTemplates.recordingServiceFee + feeTemplates.settlementFee
+                        };
+                        
+                        // Section D (Total Loan Costs)
+                        const totalLoanCosts = sectionA.total + sectionB.total + sectionC.total;
+                        
+                        // Section E
+                        const sectionE = {
+                          recordingFee,
+                          transferTax,
+                          total: recordingFee + transferTax
+                        };
+                        
+                        // Section F
+                        const sectionF = {
+                          prepaidHOI: calc.monthlyHOI * effectivePrepaidSettings.prepaidMonthsInsurance,
+                          prepaidInterest: calc.prepaidInterest,
+                          prepaidTax: calc.monthlyTax * effectivePrepaidSettings.prepaidMonthsTax,
+                          total: (calc.monthlyHOI * effectivePrepaidSettings.prepaidMonthsInsurance) + calc.prepaidInterest + (calc.monthlyTax * effectivePrepaidSettings.prepaidMonthsTax)
+                        };
+                        
+                        // Section G
+                        const sectionG = effectivePrepaidSettings.escrowWaived ? {
+                          escrowHOI: 0,
+                          escrowTax: 0,
+                          total: 0,
+                          waived: true
+                        } : {
+                          escrowHOI: calc.monthlyHOI * effectivePrepaidSettings.escrowMonthsInsurance,
+                          escrowTax: calc.monthlyTax * effectivePrepaidSettings.escrowMonthsTax,
+                          total: (calc.monthlyHOI * effectivePrepaidSettings.escrowMonthsInsurance) + (calc.monthlyTax * effectivePrepaidSettings.escrowMonthsTax),
+                          waived: false
+                        };
+                        
+                        // Section I (Total Other Costs)
+                        const totalOtherCosts = sectionE.total + sectionF.total + sectionG.total;
+                        
+                        // Section J (Total Closing Costs)
+                        const totalClosingCosts = totalLoanCosts + totalOtherCosts;
+                        
+                        // Cash to Close
+                        const downPayment = loanPurpose === 'purchase' ? propertyValue - baseLoanAmount : 0;
+                        const cashToClose = loanPurpose === 'purchase' 
+                          ? downPayment + totalClosingCosts - calc.lenderCredit
+                          : totalClosingCosts - calc.lenderCredit;
+                        
+                        return {
+                          ...calc,
+                          isRecommended: recommendedQuote === i,
+                          feeBreakdown: {
+                            sectionA,
+                            sectionB,
+                            sectionC,
+                            totalLoanCosts,
+                            sectionE,
+                            sectionF,
+                            sectionG,
+                            totalOtherCosts,
+                            totalClosingCosts,
+                            lenderCredit: calc.lenderCredit,
+                            downPayment,
+                            cashToClose
+                          }
+                        };
+                      });
+                      
+                      handleShareQuote({
+                        label: quoteLabel || `Quote for ${clientInfo.name || 'Client'}`,
+                        baseLoanAmount,
+                        loanProgram,
+                        loanPurpose,
+                        term,
+                        creditScore,
+                        rateType,
+                        armConfig,
+                        propertyDetails,
+                        propertyValue,
+                        calculations: detailedCalcs
+                      });
+                    }}
                     style={{
                       background: 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
                       display: 'flex',
