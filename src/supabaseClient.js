@@ -1,5 +1,5 @@
 // ============================================================================
-// SUPABASE CLIENT CONFIGURATION
+// SUPABASE CLIENT CONFIGURATION 12/27/25 12:33am
 // CDM Quote Pro - Database Connection
 // ============================================================================
 
@@ -9,8 +9,14 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = 'https://exghqseevcxdlckzqskc.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4Z2hxc2VldmN4ZGxja3pxc2tjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY4MTY0MDksImV4cCI6MjA4MjM5MjQwOX0.Om4FYmM_YIvSf7bFVxPQTFU2EFjK2CpY7B6F7Uka3mU';
 
-// Create Supabase client
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Create Supabase client with explicit options
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true
+  }
+});
 
 // ============================================================================
 // QUOTE FUNCTIONS
