@@ -1,5 +1,5 @@
 // ============================================================================
-// CONSUMER QUOTE VIEW PAGE V5
+// CONSUMER QUOTE VIEW PAGE V6
 // What borrowers see when they click their unique quote link
 // ============================================================================
 
@@ -146,7 +146,7 @@ const ConsumerQuoteView = () => {
         boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
-          {/* CDM Logo */}
+          {/* CDM Logo - matches main app */}
           <svg width="40" height="40" viewBox="0 0 100 100" style={{ borderRadius: '8px' }}>
             <defs>
               <linearGradient id="purpleGradConsumer" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -160,10 +160,11 @@ const ConsumerQuoteView = () => {
             <rect x="47" y="5" width="6" height="22" fill="url(#purpleGradConsumer)" transform="rotate(25, 50, 50)" />
             <rect x="47" y="5" width="6" height="18" fill="url(#purpleGradConsumer)" transform="rotate(-50, 50, 50)" />
             <rect x="47" y="5" width="6" height="18" fill="url(#purpleGradConsumer)" transform="rotate(50, 50, 50)" />
-            {/* House */}
-            <path d="M50 30 L75 52 L75 80 L25 80 L25 52 Z" fill="url(#purpleGradConsumer)" />
-            <rect x="42" y="58" width="16" height="22" fill="#1a1a1a" rx="2" />
-            <circle cx="54" cy="70" r="2" fill="url(#purpleGradConsumer)" />
+            <rect x="47" y="5" width="5" height="14" fill="#9D4EDD" transform="rotate(-70, 50, 50)" />
+            <rect x="47" y="5" width="5" height="14" fill="#9D4EDD" transform="rotate(70, 50, 50)" />
+            {/* Bowl/cup shape */}
+            <path d="M 15 55 Q 15 85 50 85 Q 85 85 85 55 L 80 55 Q 80 80 50 80 Q 20 80 20 55 Z" fill="url(#purpleGradConsumer)" />
+            <path d="M 25 55 Q 25 75 50 75 Q 75 75 75 55 L 70 55 Q 70 70 50 70 Q 30 70 30 55 Z" fill="#3C096C" />
           </svg>
           <div>
             <h1 style={{ color: 'white', fontSize: '20px', fontWeight: '700', margin: 0 }}>
