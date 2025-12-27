@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application
+// CDM QUOTE PRO - Main Application 12/27/2025 12:44am
 // ============================================================================
 
 // ============================================================================
@@ -1724,7 +1724,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
               🔔 {notifications.length > 0 && <span style={{ fontWeight: '600' }}>{notifications.length}</span>}
             </button>
             
-            {showNotifications && notifications.length > 0 && (
+            {showNotifications && (
               <div style={{
                 position: 'absolute',
                 top: '100%',
@@ -1738,50 +1738,74 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                 overflow: 'auto',
                 zIndex: 1000
               }}>
-                <div style={{ padding: '16px', borderBottom: '1px solid #eee' }}>
+                <div style={{ padding: '16px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <strong style={{ fontSize: '14px' }}>Notifications</strong>
+                  <button onClick={() => setShowNotifications(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}>✕</button>
                 </div>
-                {notifications.map(notif => (
-                  <div 
-                    key={notif.id} 
-                    style={{ 
-                      padding: '12px 16px', 
-                      borderBottom: '1px solid #eee',
-                      cursor: 'pointer'
-                    }}
-                    onClick={() => handleMarkNotificationRead(notif.id)}
-                  >
-                    <div style={{ fontWeight: '600', fontSize: '13px', marginBottom: '4px' }}>
-                      {notif.title}
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#666' }}>
-                      {notif.message}
-                    </div>
+                {notifications.length === 0 ? (
+                  <div style={{ padding: '32px 16px', textAlign: 'center', color: '#888' }}>
+                    <div style={{ fontSize: '32px', marginBottom: '8px' }}>🔔</div>
+                    <div style={{ fontSize: '14px' }}>No new notifications</div>
+                    <div style={{ fontSize: '12px', marginTop: '4px' }}>You'll be notified when clients view their quotes</div>
                   </div>
-                ))}
+                ) : (
+                  notifications.map(notif => (
+                    <div 
+                      key={notif.id} 
+                      style={{ 
+                        padding: '12px 16px', 
+                        borderBottom: '1px solid #eee',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => handleMarkNotificationRead(notif.id)}
+                    >
+                      <div style={{ fontWeight: '600', fontSize: '13px', marginBottom: '4px' }}>
+                        {notif.title}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#666' }}>
+                        {notif.message}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             )}
           </div>
           
           {/* User Profile */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontWeight: '600',
-              fontSize: '14px'
-            }}>
-              {loanOfficer?.full_name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
-            </div>
-            <div style={{ color: 'white' }}>
-              <div style={{ fontSize: '13px', fontWeight: '600' }}>{loanOfficer?.full_name || 'User'}</div>
-              <div style={{ fontSize: '11px', color: '#888' }}>NMLS# {loanOfficer?.nmls_number || ''}</div>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div 
+              onClick={() => setActiveTab('admin')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                cursor: 'pointer',
+                padding: '6px 10px',
+                borderRadius: '8px',
+                transition: 'background 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#333'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              <div style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontWeight: '600',
+                fontSize: '14px'
+              }}>
+                {loanOfficer?.full_name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'}
+              </div>
+              <div style={{ color: 'white' }}>
+                <div style={{ fontSize: '13px', fontWeight: '600' }}>{loanOfficer?.full_name || 'User'}</div>
+                <div style={{ fontSize: '11px', color: '#888' }}>NMLS# {loanOfficer?.nmls_number || ''}</div>
+              </div>
             </div>
             <button
               onClick={onSignOut}
