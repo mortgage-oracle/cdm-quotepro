@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V14
+// CDM QUOTE PRO - Main Application V15
 // ============================================================================
 
 // ============================================================================
@@ -244,6 +244,36 @@ const calculateMonthlyPMI = (loanAmount, creditScore, ltv, loanProgram, rates = 
 };
 
 // Calculate upfront MIP/Funding Fee
+// Calculate VA Funding Fee based on down payment and usage type
+const calculateVAFundingFee = (loanAmount, downPaymentPercent, isFirstUse = true) => {
+  // VA Funding Fee table (as of 2024)
+  // First use rates:
+  // - 0% down: 2.15%
+  // - 5%+ down: 1.5%
+  // - 10%+ down: 1.25%
+  // Subsequent use rates:
+  // - 0% down: 3.3%
+  // - 5%+ down: 1.5%
+  // - 10%+ down: 1.25%
+  
+  let rate;
+  if (downPaymentPercent >= 10) {
+    rate = 0.0125;
+  } else if (downPaymentPercent >= 5) {
+    rate = 0.015;
+  } else {
+    rate = isFirstUse ? 0.0215 : 0.033;
+  }
+  
+  return loanAmount * rate;
+};
+
+// Calculate FHA Upfront MIP
+const calculateFHAUpfrontMIP = (loanAmount) => {
+  return loanAmount * 0.0175; // 1.75% UFMIP
+};
+
+// Legacy function - kept for backward compatibility
 const calculateUpfrontMIP = (loanAmount, loanProgram, isVeteran, vaUsageType) => {
   if (loanProgram === 'fha') {
     return loanAmount * 0.0175; // 1.75% UFMIP
@@ -753,6 +783,9 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
   const [term, setTerm] = useState(30);
   const [creditScore, setCreditScore] = useState(740);
   const [isVeteran, setIsVeteran] = useState(false);
+  const [vaFundingFeeExempt, setVaFundingFeeExempt] = useState(false); // Disabled veteran exemption
+  const [vaFundingFeeFinanced, setVaFundingFeeFinanced] = useState(true); // Finance vs pay at closing
+  const [fhaMIPFinanced, setFhaMIPFinanced] = useState(true); // Finance vs pay at closing
   const [baseLoanAmount, setBaseLoanAmount] = useState(400000);
   
   // ARM Configuration
@@ -1221,11 +1254,29 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
       const rate = option.rate / 100;
       const ratePrice = option.price;
       
-      // Calculate upfront MIP/FF
-      const upfrontMIP = calculateUpfrontMIP(baseLoanAmount, loanProgram, isVeteran);
+      // Calculate upfront government fees (FHA UFMIP or VA Funding Fee)
+      let upfrontFee = 0;
+      let upfrontFeeFinanced = true;
+      let upfrontFeeLabel = '';
       
-      // Total loan amount (base + financed MIP if applicable)
-      const totalLoanAmount = baseLoanAmount + upfrontMIP;
+      if (loanProgram === 'fha') {
+        upfrontFee = calculateFHAUpfrontMIP(baseLoanAmount);
+        upfrontFeeFinanced = fhaMIPFinanced;
+        upfrontFeeLabel = 'FHA Upfront MIP';
+      } else if (loanProgram === 'va' && !vaFundingFeeExempt) {
+        const dpPercent = loanPurpose === 'purchase' ? (propertyDetails.downPaymentPercent || 0) : 0;
+        upfrontFee = calculateVAFundingFee(baseLoanAmount, dpPercent);
+        upfrontFeeFinanced = vaFundingFeeFinanced;
+        upfrontFeeLabel = 'VA Funding Fee';
+      }
+      
+      // Amount added to loan (if financed)
+      const financedUpfrontFee = upfrontFeeFinanced ? upfrontFee : 0;
+      // Amount added to closing costs (if not financed)
+      const closingUpfrontFee = upfrontFeeFinanced ? 0 : upfrontFee;
+      
+      // Total loan amount (base + financed upfront fee if applicable)
+      const totalLoanAmount = baseLoanAmount + financedUpfrontFee;
       
       // LTV based on total loan
       const ltv = totalLoanAmount / propertyValue;
@@ -1240,9 +1291,10 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
       // Includes LO compensation - deducted from lender credit or added to borrower cost
       const pointsCost = calculatePointsCost(baseLoanAmount, ratePrice, loCompensation);
       
-      // Fixed third-party fees (Section B)
+      // Fixed third-party fees (Section B) - add upfront fee here if not financed
       const thirdPartyFees = feeTemplates.appraisal + feeTemplates.creditReport + 
-                            feeTemplates.processing + feeTemplates.floodCert + feeTemplates.taxService;
+                            feeTemplates.processing + feeTemplates.floodCert + feeTemplates.taxService +
+                            closingUpfrontFee;
       
       // Origination fees (Section A - excluding points)
       const originationFees = feeTemplates.adminFee + feeTemplates.underwritingFee;
@@ -1270,7 +1322,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
       const sectionA = (pointsCost > 0 ? pointsCost : 0) + originationFees;
       const sectionB = thirdPartyFees;
       const sectionC = titleFees;
-      const totalLoanCosts = sectionA + sectionB + sectionC + upfrontMIP;
+      const totalLoanCosts = sectionA + sectionB + sectionC;
       
       // I. Total Other Costs (E + F + G)
       const totalOtherCosts = governmentFees + totalPrepaids + escrowReserves;
@@ -1341,7 +1393,12 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
         lenderCredit,
         titleFees,
         thirdPartyFees,
-        upfrontMIP,
+        // Upfront government fee details
+        upfrontFee,
+        upfrontFeeFinanced,
+        upfrontFeeLabel,
+        financedUpfrontFee,
+        closingUpfrontFee,
         // Section E - Government Fees
         recordingFee,
         transferTax,
@@ -1391,10 +1448,10 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
       };
     });
   }, [rateOptions, baseLoanAmount, propertyValue, term, loanProgram, creditScore, 
-      clientInfo.state, feeTemplates, effectivePrepaidSettings, isVeteran, baseLTV, 
+      clientInfo.state, feeTemplates, effectivePrepaidSettings, baseLTV, 
       loanPurpose, propertyDetails, monthlyEscrow, titleFees, loCompensation, monthlyTax, monthlyHOI,
       propertyTaxRates, titleInsuranceRates, baseTitleFees, pmiRates, recordingFees, transferTaxRates,
-      rateType, armConfig]);
+      rateType, armConfig, vaFundingFeeExempt, vaFundingFeeFinanced, fhaMIPFinanced]);
 
   // Amortization schedule
   const amortSchedule = useMemo(() => {
@@ -1681,6 +1738,9 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
         creditScore,
         baseLoanAmount,
         isVeteran,
+        vaFundingFeeExempt,
+        vaFundingFeeFinanced,
+        fhaMIPFinanced,
         rateType,
         armConfig: rateType === 'arm' ? { ...armConfig } : null,
         propertyDetails,
@@ -1747,6 +1807,10 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
       setCreditScore(data.creditScore || 740);
       if (data.baseLoanAmount !== undefined) setBaseLoanAmount(data.baseLoanAmount);
       if (data.isVeteran !== undefined) setIsVeteran(data.isVeteran);
+      // FHA/VA fee settings
+      if (data.vaFundingFeeExempt !== undefined) setVaFundingFeeExempt(data.vaFundingFeeExempt);
+      if (data.vaFundingFeeFinanced !== undefined) setVaFundingFeeFinanced(data.vaFundingFeeFinanced);
+      if (data.fhaMIPFinanced !== undefined) setFhaMIPFinanced(data.fhaMIPFinanced);
       if (data.rateType) setRateType(data.rateType);
       if (data.armConfig) setArmConfig(data.armConfig);
       if (data.propertyDetails) setPropertyDetails(data.propertyDetails);
@@ -2069,11 +2133,66 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                 </div>
                 
                 {loanProgram === 'va' && (
-                  <div style={{ marginTop: '12px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                      <input type="checkbox" checked={isVeteran} onChange={(e) => setIsVeteran(e.target.checked)} />
-                      <span style={{ fontSize: '13px' }}>Veteran (VA Funding Fee applies)</span>
+                  <div style={{ marginTop: '12px', background: '#f8f8f8', padding: '12px', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#666', marginBottom: '8px' }}>VA Funding Fee</div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '8px' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={vaFundingFeeExempt} 
+                        onChange={(e) => setVaFundingFeeExempt(e.target.checked)} 
+                      />
+                      <span style={{ fontSize: '13px' }}>Exempt (10%+ disability)</span>
                     </label>
+                    {!vaFundingFeeExempt && (
+                      <>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '8px' }}>
+                          <button 
+                            onClick={() => setVaFundingFeeFinanced(true)}
+                            className={`btn-secondary ${vaFundingFeeFinanced ? 'active' : ''}`}
+                            style={{ padding: '8px', fontSize: '11px' }}
+                          >
+                            Finance
+                          </button>
+                          <button 
+                            onClick={() => setVaFundingFeeFinanced(false)}
+                            className={`btn-secondary ${!vaFundingFeeFinanced ? 'active' : ''}`}
+                            style={{ padding: '8px', fontSize: '11px' }}
+                          >
+                            Pay at Closing
+                          </button>
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#7B2CBF', marginTop: '6px', fontWeight: '600' }}>
+                          Fee: {formatCurrency(calculateVAFundingFee(baseLoanAmount, loanPurpose === 'purchase' ? (propertyDetails.downPaymentPercent || 0) : 0))}
+                          {vaFundingFeeFinanced ? ' (Added to loan)' : ' (Section B)'}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+                
+                {loanProgram === 'fha' && (
+                  <div style={{ marginTop: '12px', background: '#f8f8f8', padding: '12px', borderRadius: '8px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '600', color: '#666', marginBottom: '8px' }}>Upfront MIP (1.75%)</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                      <button 
+                        onClick={() => setFhaMIPFinanced(true)}
+                        className={`btn-secondary ${fhaMIPFinanced ? 'active' : ''}`}
+                        style={{ padding: '8px', fontSize: '11px' }}
+                      >
+                        Finance
+                      </button>
+                      <button 
+                        onClick={() => setFhaMIPFinanced(false)}
+                        className={`btn-secondary ${!fhaMIPFinanced ? 'active' : ''}`}
+                        style={{ padding: '8px', fontSize: '11px' }}
+                      >
+                        Pay at Closing
+                      </button>
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#7B2CBF', marginTop: '6px', fontWeight: '600' }}>
+                      Fee: {formatCurrency(calculateFHAUpfrontMIP(baseLoanAmount))}
+                      {fhaMIPFinanced ? ' (Added to loan)' : ' (Section B)'}
+                    </div>
                   </div>
                 )}
                 
@@ -2405,14 +2524,19 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                           total: (calc.pointsCost > 0 ? calc.pointsCost : 0) + feeTemplates.adminFee + feeTemplates.underwritingFee
                         };
                         
-                        // Section B
+                        // Section B - includes upfront government fees if not financed
                         const sectionB = {
                           appraisal: feeTemplates.appraisal,
                           creditReport: feeTemplates.creditReport,
                           floodCert: feeTemplates.floodCert,
                           processing: feeTemplates.processing,
                           taxService: feeTemplates.taxService,
-                          total: feeTemplates.appraisal + feeTemplates.creditReport + feeTemplates.floodCert + feeTemplates.processing + feeTemplates.taxService
+                          // Upfront government fee (if paid at closing, not financed)
+                          upfrontFee: calc.closingUpfrontFee || 0,
+                          upfrontFeeLabel: calc.upfrontFeeLabel || '',
+                          upfrontFeeFinanced: calc.upfrontFeeFinanced,
+                          total: feeTemplates.appraisal + feeTemplates.creditReport + feeTemplates.floodCert + 
+                                 feeTemplates.processing + feeTemplates.taxService + (calc.closingUpfrontFee || 0)
                         };
                         
                         // Section C
@@ -2482,7 +2606,12 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                             totalClosingCosts,
                             lenderCredit: calc.lenderCredit,
                             downPayment,
-                            cashToClose
+                            cashToClose,
+                            // Upfront government fee info for display
+                            upfrontFee: calc.upfrontFee || 0,
+                            upfrontFeeFinanced: calc.upfrontFeeFinanced,
+                            upfrontFeeLabel: calc.upfrontFeeLabel || '',
+                            financedUpfrontFee: calc.financedUpfrontFee || 0
                           }
                         };
                       });
@@ -2498,6 +2627,10 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                         armConfig,
                         propertyDetails,
                         propertyValue,
+                        // Include FHA/VA fee settings
+                        vaFundingFeeExempt,
+                        vaFundingFeeFinanced,
+                        fhaMIPFinanced,
                         calculations: detailedCalcs
                       });
                     }}
@@ -2768,7 +2901,12 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                     
                     <div style={{ marginTop: '12px', fontSize: '11px', color: '#888', display: 'flex', justifyContent: 'space-between' }}>
                       <span>LTV: {(calc.ltv * 100).toFixed(1)}%</span>
-                      <span>Loan: {formatCurrency(calc.totalLoanAmount)}</span>
+                      <span>
+                        Loan: {formatCurrency(calc.totalLoanAmount)}
+                        {calc.financedUpfrontFee > 0 && (
+                          <span style={{ color: '#7B2CBF' }}> (incl. {loanProgram === 'fha' ? 'UFMIP' : 'FF'})</span>
+                        )}
+                      </span>
                     </div>
                   </div>
                   </div>
