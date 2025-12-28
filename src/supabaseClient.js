@@ -1,5 +1,5 @@
 // ============================================================================
-// SUPABASE CLIENT CONFIGURATION V3
+// SUPABASE CLIENT CONFIGURATION V4
 // CDM Quote Pro - Database Connection
 // ============================================================================
 
@@ -555,6 +555,51 @@ export async function updateLoanOfficerProfile(id, updates) {
   }
 
   return data;
+}
+
+/**
+ * Save fee templates for a loan officer (uses REST API for Edge compatibility)
+ */
+export async function saveFeeTemplates(loanOfficerId, feeTemplates) {
+  console.log('Saving fee templates for LO:', loanOfficerId);
+  
+  const token = await getAuthToken();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/loan_officers?id=eq.${loanOfficerId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${token || SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify({ 
+          fee_templates: feeTemplates,
+          updated_at: new Date().toISOString()
+        }),
+        signal: controller.signal
+      }
+    );
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to save fee templates: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('Fee templates saved');
+    return Array.isArray(data) ? data[0] : data;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    console.error('Error saving fee templates:', err);
+    throw err;
+  }
 }
 
 /**
