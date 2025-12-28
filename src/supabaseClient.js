@@ -1,5 +1,5 @@
 // ============================================================================
-// SUPABASE CLIENT CONFIGURATION 4 V5
+// SUPABASE CLIENT CONFIGURATION V5
 // CDM Quote Pro - Database Connection
 // ============================================================================
 
@@ -598,6 +598,51 @@ export async function saveFeeTemplates(loanOfficerId, feeTemplates) {
   } catch (err) {
     clearTimeout(timeoutId);
     console.error('Error saving fee templates:', err);
+    throw err;
+  }
+}
+
+/**
+ * Save state lookup tables for a loan officer (uses REST API for Edge compatibility)
+ */
+export async function saveStateLookupTables(loanOfficerId, stateLookupTables) {
+  console.log('Saving state lookup tables for LO:', loanOfficerId);
+  
+  const token = await getAuthToken();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/loan_officers?id=eq.${loanOfficerId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${token || SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify({ 
+          state_lookup_tables: stateLookupTables,
+          updated_at: new Date().toISOString()
+        }),
+        signal: controller.signal
+      }
+    );
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to save state lookup tables: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('State lookup tables saved');
+    return Array.isArray(data) ? data[0] : data;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    console.error('Error saving state lookup tables:', err);
     throw err;
   }
 }
