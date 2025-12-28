@@ -1,10 +1,11 @@
 // ============================================================================
-// CDM QUOTE PRO - MAIN APP V7
+// CDM QUOTE PRO - MAIN APP V8
 // Routes between LO tool and consumer quote view
+// Fixed: Login loop issue in Edge browser
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import AuthComponent from './components/AuthComponent';
 import QuotePro from './pages/QuotePro';
@@ -57,7 +58,7 @@ function App() {
   };
 
   useEffect(() => {
-    // Skip auth checking if in recovery mode
+    // Skip if recovery mode
     if (isRecoveryMode) {
       return;
     }
@@ -72,10 +73,9 @@ function App() {
     let isMounted = true;
     
     // FAILSAFE: Force loading to false after 5 seconds no matter what
-    // But DON'T clear storage - just show login screen and let user try again
     const failsafeTimeout = setTimeout(() => {
       if (isMounted && loading) {
-        console.log('Failsafe timeout - forcing loading to false (session may still be valid)');
+        console.log('Failsafe timeout - forcing loading to false');
         setLoading(false);
       }
     }, 5000);
@@ -94,21 +94,32 @@ function App() {
     init();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state change:', event);
+      console.log('Auth state change:', event, session?.user?.email);
       
-      // Handle password recovery event
       if (event === 'PASSWORD_RECOVERY') {
-        console.log('PASSWORD_RECOVERY event detected');
+        console.log('PASSWORD_RECOVERY event - entering recovery mode');
         setIsRecoveryMode(true);
         setLoading(false);
         return;
       }
       
       if (event === 'SIGNED_OUT') {
+        console.log('User signed out');
         setUser(null);
         setLoanOfficer(null);
-      } else if (event === 'SIGNED_IN' && session && !isRecoveryMode) {
-        await loadLoanOfficer(session.user.email);
+      } else if (event === 'SIGNED_IN' && session?.user) {
+        console.log('User signed in, loading loan officer...');
+        // Set user immediately so we don't stay stuck
+        setUser(session.user);
+        // Then try to load loan officer
+        const lo = await loadLoanOfficerWithTimeout(session.user.email);
+        if (lo) {
+          console.log('Loan officer loaded successfully:', lo.full_name);
+          setLoanOfficer(lo);
+        } else {
+          console.error('Failed to load loan officer - user may not be authorized');
+          // Don't clear user - let the UI show an error
+        }
       }
     });
 
@@ -123,13 +134,11 @@ function App() {
     try {
       console.log('Checking session...');
       
-      // Wrap getSession in a timeout promise - increased to 8 seconds
+      // Wrap getSession in a timeout promise
       const getSessionWithTimeout = () => {
         return new Promise(async (resolve) => {
           const timeout = setTimeout(() => {
-            console.log('getSession timed out - but NOT clearing storage');
-            // Don't clear storage on timeout - just resolve with no session
-            // The session might still be valid, just slow to load
+            console.log('getSession timed out');
             resolve({ data: { session: null }, error: new Error('Timeout') });
           }, 8000);
           
@@ -147,14 +156,12 @@ function App() {
       const { data: { session }, error } = await getSessionWithTimeout();
       
       if (error && error.message !== 'Timeout') {
-        // Only clear storage for real errors, not timeouts
-        console.log('Session check error, clearing storage:', error.message);
+        console.log('Session check error:', error.message);
         clearAllAuthStorage();
         return;
       }
       
       if (error?.message === 'Timeout') {
-        // On timeout, just log but don't clear - let user try logging in again
         console.log('Session check timed out - showing login screen');
         return;
       }
@@ -162,36 +169,69 @@ function App() {
       console.log('Session result:', session ? 'Found' : 'None');
       
       if (session?.user) {
-        await loadLoanOfficer(session.user.email);
         setUser(session.user);
+        const lo = await loadLoanOfficerWithTimeout(session.user.email);
+        if (lo) {
+          setLoanOfficer(lo);
+        }
       }
     } catch (error) {
       console.error('Session check error:', error);
-      // Only clear on actual auth errors, not network issues
       if (error.message?.includes('auth') || error.message?.includes('token')) {
         clearAllAuthStorage();
       }
     }
   };
 
-  const loadLoanOfficer = async (email) => {
-    try {
-      const { data: lo, error } = await supabase
-        .from('loan_officers')
-        .select('*')
-        .eq('email', email.toLowerCase())
-        .single();
+  // Load loan officer with timeout protection
+  const loadLoanOfficerWithTimeout = async (email) => {
+    console.log('Loading loan officer for:', email);
+    
+    return new Promise(async (resolve) => {
+      const timeout = setTimeout(() => {
+        console.error('loadLoanOfficer timed out');
+        resolve(null);
+      }, 10000); // 10 second timeout
+      
+      try {
+        const { data: lo, error } = await supabase
+          .from('loan_officers')
+          .select('*')
+          .eq('email', email.toLowerCase())
+          .single();
 
-      if (!error && lo && lo.is_active) {
-        setLoanOfficer(lo);
-        setUser({ email });
+        clearTimeout(timeout);
+
+        if (error) {
+          console.error('Error loading loan officer:', error);
+          resolve(null);
+          return;
+        }
+
+        if (!lo) {
+          console.error('No loan officer found for email:', email);
+          resolve(null);
+          return;
+        }
+
+        if (!lo.is_active) {
+          console.error('Loan officer is not active:', email);
+          resolve(null);
+          return;
+        }
+
+        console.log('Loan officer loaded:', lo.full_name);
+        resolve(lo);
+      } catch (err) {
+        clearTimeout(timeout);
+        console.error('Exception loading loan officer:', err);
+        resolve(null);
       }
-    } catch (err) {
-      console.error('Error loading loan officer:', err);
-    }
+    });
   };
 
   const handleAuthSuccess = (authUser, lo) => {
+    console.log('handleAuthSuccess called:', authUser?.email, lo?.full_name);
     setUser(authUser);
     setLoanOfficer(lo);
   };
