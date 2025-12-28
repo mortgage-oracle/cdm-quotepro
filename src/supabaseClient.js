@@ -1,5 +1,5 @@
 // ============================================================================
-// SUPABASE CLIENT CONFIGURATION V6
+// SUPABASE CLIENT CONFIGURATION V7
 // CDM Quote Pro - Database Connection
 // ============================================================================
 
@@ -27,28 +27,59 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
  * Returns the quote with its shareable link ID
  */
 export async function saveQuote(loanOfficerId, quoteData) {
-  const { data, error } = await supabase
-    .from('quotes')
-    .insert({
-      loan_officer_id: loanOfficerId,
-      client_name: quoteData.clientInfo?.name || 'Unknown Client',
-      client_email: quoteData.clientInfo?.email || null,
-      client_phone: quoteData.clientInfo?.phone || null,
-      property_address: quoteData.clientInfo?.address || null,
-      label: quoteData.label || null,
-      quote_type: quoteData.quoteType || 'mortgage',
-      quote_data: quoteData,
-      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error saving quote:', error);
-    throw error;
+  console.log('Saving quote for LO:', loanOfficerId);
+  
+  const quotePayload = {
+    loan_officer_id: loanOfficerId,
+    client_name: quoteData.clientInfo?.name || 'Unknown Client',
+    client_email: quoteData.clientInfo?.email || null,
+    client_phone: quoteData.clientInfo?.phone || null,
+    property_address: quoteData.clientInfo?.address || null,
+    label: quoteData.label || null,
+    quote_type: quoteData.quoteType || 'mortgage',
+    quote_data: quoteData,
+    expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+  };
+  
+  // Use REST API for Edge compatibility
+  const token = await getAuthToken();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/quotes`,
+      {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${token || SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify(quotePayload),
+        signal: controller.signal
+      }
+    );
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('Save quote error:', response.status, errText);
+      throw new Error(`Failed to save quote: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('Quote saved:', data);
+    
+    // Response is an array, return first item
+    return Array.isArray(data) ? data[0] : data;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    console.error('Error saving quote:', err);
+    throw err;
   }
-
-  return data;
 }
 
 /**
@@ -106,39 +137,110 @@ export async function getQuoteByShareId(shareId) {
   }
 }
 
+// ============================================================================
+// REST API HELPER (for Edge browser compatibility)
+// ============================================================================
+
+async function getAuthToken() {
+  const { data } = await supabase.auth.getSession();
+  return data?.session?.access_token || null;
+}
+
+async function restQuery(table, queryParams = '', options = {}) {
+  const token = await getAuthToken();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), options.timeout || 10000);
+  
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/${table}${queryParams}`,
+      {
+        method: options.method || 'GET',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${token || SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': options.prefer || 'return=representation'
+        },
+        body: options.body ? JSON.stringify(options.body) : undefined,
+        signal: controller.signal
+      }
+    );
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`REST API error: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return { data, error: null };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    console.error('REST query error:', err);
+    return { data: null, error: err };
+  }
+}
+
 /**
  * Get all quotes for a loan officer
  */
 export async function getQuotesForLO(loanOfficerId) {
-  const { data, error } = await supabase
-    .from('quotes')
-    .select('*')
-    .eq('loan_officer_id', loanOfficerId)
-    .order('created_at', { ascending: false });
-
+  console.log('Fetching quotes for LO:', loanOfficerId);
+  
+  // Try REST API first (Edge-compatible)
+  const { data, error } = await restQuery(
+    'quotes',
+    `?loan_officer_id=eq.${loanOfficerId}&order=created_at.desc`
+  );
+  
   if (error) {
     console.error('Error fetching quotes:', error);
-    throw error;
+    // Return empty array instead of throwing to prevent UI hang
+    return [];
   }
 
-  return data;
+  console.log('Quotes loaded:', data?.length || 0);
+  return data || [];
 }
 
 /**
  * Delete a quote
  */
 export async function deleteQuote(quoteId) {
-  const { error } = await supabase
-    .from('quotes')
-    .delete()
-    .eq('id', quoteId);
-
-  if (error) {
-    console.error('Error deleting quote:', error);
-    throw error;
+  console.log('Deleting quote:', quoteId);
+  
+  const token = await getAuthToken();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/quotes?id=eq.${quoteId}`,
+      {
+        method: 'DELETE',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${token || SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        signal: controller.signal
+      }
+    );
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to delete quote: ${response.status}`);
+    }
+    
+    console.log('Quote deleted');
+    return true;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    console.error('Error deleting quote:', err);
+    throw err;
   }
-
-  return true;
 }
 
 /**
@@ -226,99 +328,122 @@ function detectDeviceType() {
  * Get unread notifications for a loan officer
  */
 export async function getUnreadNotifications(loanOfficerId) {
-  const { data, error } = await supabase
-    .from('notifications')
-    .select(`
-      *,
-      quotes (
-        id,
-        share_id,
-        client_name,
-        label,
-        quote_type,
-        quote_data
-      )
-    `)
-    .eq('loan_officer_id', loanOfficerId)
-    .eq('is_read', false)
-    .order('created_at', { ascending: false });
+  console.log('Fetching unread notifications for LO:', loanOfficerId);
+  
+  // Use REST API for Edge compatibility
+  const { data, error } = await restQuery(
+    'notifications',
+    `?loan_officer_id=eq.${loanOfficerId}&is_read=eq.false&order=created_at.desc&select=*,quotes(id,share_id,client_name,label,quote_type,quote_data)`
+  );
 
   if (error) {
     console.error('Error fetching notifications:', error);
-    throw error;
+    return [];
   }
 
-  return data;
+  return data || [];
 }
 
 /**
  * Get ALL notifications for a loan officer (for Notifications page)
  */
 export async function getAllNotifications(loanOfficerId, limit = 100) {
-  const { data, error } = await supabase
-    .from('notifications')
-    .select(`
-      *,
-      quotes (
-        id,
-        share_id,
-        client_name,
-        label,
-        quote_type,
-        quote_data,
-        created_at
-      )
-    `)
-    .eq('loan_officer_id', loanOfficerId)
-    .order('created_at', { ascending: false })
-    .limit(limit);
+  console.log('Fetching all notifications for LO:', loanOfficerId);
+  
+  // Use REST API for Edge compatibility
+  const { data, error } = await restQuery(
+    'notifications',
+    `?loan_officer_id=eq.${loanOfficerId}&order=created_at.desc&limit=${limit}&select=*,quotes(id,share_id,client_name,label,quote_type,quote_data,created_at)`
+  );
 
   if (error) {
     console.error('Error fetching all notifications:', error);
-    throw error;
+    return [];
   }
 
-  return data;
+  return data || [];
 }
 
 /**
  * Mark a notification as read (dismissed from bell)
  */
 export async function markNotificationRead(notificationId) {
-  const { error } = await supabase
-    .from('notifications')
-    .update({ 
-      is_read: true, 
-      read_at: new Date().toISOString() 
-    })
-    .eq('id', notificationId);
-
-  if (error) {
-    console.error('Error marking notification read:', error);
-    throw error;
+  const token = await getAuthToken();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/notifications?id=eq.${notificationId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${token || SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({ 
+          is_read: true, 
+          read_at: new Date().toISOString() 
+        }),
+        signal: controller.signal
+      }
+    );
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to mark notification read: ${response.status}`);
+    }
+    
+    return true;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    console.error('Error marking notification read:', err);
+    return false;
   }
-
-  return true;
 }
 
 /**
  * Mark a notification as reviewed (user has followed up)
  */
 export async function markNotificationReviewed(notificationId, reviewed = true) {
-  const { error } = await supabase
-    .from('notifications')
-    .update({ 
-      reviewed: reviewed,
-      reviewed_at: reviewed ? new Date().toISOString() : null
-    })
-    .eq('id', notificationId);
-
-  if (error) {
-    console.error('Error marking notification reviewed:', error);
-    throw error;
+  const token = await getAuthToken();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/notifications?id=eq.${notificationId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${token || SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({ 
+          reviewed: reviewed,
+          reviewed_at: reviewed ? new Date().toISOString() : null
+        }),
+        signal: controller.signal
+      }
+    );
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to mark notification reviewed: ${response.status}`);
+    }
+    
+    return true;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    console.error('Error marking notification reviewed:', err);
+    return false;
   }
-
-  return true;
 }
 
 /**
