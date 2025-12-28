@@ -1,5 +1,5 @@
 // ============================================================================
-// SUPABASE CLIENT CONFIGURATION V7
+// SUPABASE CLIENT CONFIGURATION V3
 // CDM Quote Pro - Database Connection
 // ============================================================================
 
@@ -8,6 +8,21 @@ import { createClient } from '@supabase/supabase-js';
 // Supabase credentials
 const SUPABASE_URL = 'https://exghqseevcxdlckzqskc.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4Z2hxc2VldmN4ZGxja3pxc2tjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY4MTY0MDksImV4cCI6MjA4MjM5MjQwOX0.Om4FYmM_YIvSf7bFVxPQTFU2EFjK2CpY7B6F7Uka3mU';
+
+// Module-level token storage (for Edge browser compatibility)
+let cachedAccessToken = null;
+
+// Store token after login (call this from AuthComponent)
+export function setAccessToken(token) {
+  console.log('Setting cached access token');
+  cachedAccessToken = token;
+}
+
+// Clear token on logout
+export function clearAccessToken() {
+  console.log('Clearing cached access token');
+  cachedAccessToken = null;
+}
 
 // Create Supabase client with explicit options
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -142,8 +157,21 @@ export async function getQuoteByShareId(shareId) {
 // ============================================================================
 
 async function getAuthToken() {
+  // First try cached token (for Edge browser compatibility)
+  if (cachedAccessToken) {
+    console.log('Using cached access token');
+    return cachedAccessToken;
+  }
+  
+  // Fall back to Supabase session
   const { data } = await supabase.auth.getSession();
-  return data?.session?.access_token || null;
+  const token = data?.session?.access_token || null;
+  
+  if (token) {
+    cachedAccessToken = token; // Cache it
+  }
+  
+  return token;
 }
 
 async function restQuery(table, queryParams = '', options = {}) {
