@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnreadNotifications, getAllNotifications, subscribeToNotifications, markNotificationRead, markNotificationReviewed, updateLoanOfficerProfile, updateLoanOfficerByEmail } from '../supabaseClient';
+import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnreadNotifications, getAllNotifications, subscribeToNotifications, markNotificationRead, markNotificationReviewed, updateLoanOfficerProfile, updateLoanOfficerByEmail, saveFeeTemplates } from '../supabaseClient';
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V29
+// CDM QUOTE PRO - Main Application 29 V29
 // ============================================================================
 
 // ============================================================================
@@ -831,7 +831,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
   // ============================================================================
   // FEE TEMPLATES (Admin-level defaults)
   // ============================================================================
-  const [feeTemplates, setFeeTemplates] = useState({
+  const defaultFeeTemplates = {
     // Section A - Origination
     adminFee: 1895,
     underwritingFee: 995,
@@ -875,7 +875,39 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
     heCreditReport: 50,
     heFloodCert: 8,
     heProcessingFee: 0
-  });
+  };
+  
+  const [feeTemplates, setFeeTemplates] = useState(defaultFeeTemplates);
+  const [savingFeeTemplates, setSavingFeeTemplates] = useState(false);
+  const [feeTemplatesLoaded, setFeeTemplatesLoaded] = useState(false);
+  
+  // Load fee templates from loanOfficer on mount
+  useEffect(() => {
+    if (loanOfficer?.fee_templates && !feeTemplatesLoaded) {
+      console.log('Loading fee templates from database:', loanOfficer.fee_templates);
+      setFeeTemplates(prev => ({
+        ...prev,
+        ...loanOfficer.fee_templates
+      }));
+      setFeeTemplatesLoaded(true);
+    }
+  }, [loanOfficer?.fee_templates, feeTemplatesLoaded]);
+  
+  // Save fee templates to database
+  const handleSaveFeeTemplates = async () => {
+    if (!loanOfficer?.id) return;
+    
+    setSavingFeeTemplates(true);
+    try {
+      await saveFeeTemplates(loanOfficer.id, feeTemplates);
+      alert('Fee templates saved successfully!');
+    } catch (err) {
+      console.error('Failed to save fee templates:', err);
+      alert('Failed to save fee templates. Please try again.');
+    } finally {
+      setSavingFeeTemplates(false);
+    }
+  };
   
   // Quote-level fee overrides (null = use template/auto value)
   const [feeOverrides, setFeeOverrides] = useState({});
@@ -5305,6 +5337,38 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                       </div>
                     )}
                   </div>
+                </div>
+                
+                {/* Save Fee Templates Button */}
+                <div style={{ 
+                  marginTop: '24px', 
+                  paddingTop: '20px', 
+                  borderTop: '2px solid #eee',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <div style={{ fontSize: '13px', color: '#666' }}>
+                    Save these templates to persist across sessions
+                  </div>
+                  <button
+                    onClick={handleSaveFeeTemplates}
+                    disabled={savingFeeTemplates}
+                    style={{
+                      padding: '12px 24px',
+                      background: savingFeeTemplates ? '#ccc' : 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontWeight: '600',
+                      cursor: savingFeeTemplates ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    {savingFeeTemplates ? '⏳ Saving...' : '💾 Save Fee Templates'}
+                  </button>
                 </div>
               </div>
             </div>
