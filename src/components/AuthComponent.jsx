@@ -1,736 +1,351 @@
 // ============================================================================
-// AUTHENTICATION COMPONENT V6
-// Login / Sign Up for Loan Officers
+// CDM QUOTE PRO - MAIN APP V9
+// Routes between LO tool and consumer quote view
+// Fixed: Login loop issue in Edge browser
 // ============================================================================
 
-import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '../supabaseClient';
+import React, { useState, useEffect } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { supabase, setAccessToken, clearAccessToken } from './supabaseClient';
+import AuthComponent from './components/AuthComponent';
+import QuotePro from './pages/QuotePro';
+import ConsumerQuoteView from './pages/ConsumerQuoteView';
+import ResetPassword from './pages/ResetPassword';
 
-// Allowed email domains for signup
-const ALLOWED_DOMAINS = ['clientdirectmtg.com'];
+function App() {
+  const [user, setUser] = useState(null);
+  const [loanOfficer, setLoanOfficer] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
 
-const AuthComponent = ({ onAuthSuccess }) => {
-  const [mode, setMode] = useState('login'); // 'login', 'signup', 'forgot'
-  const [loading, setLoading] = useState(false);
-  const [loginStuck, setLoginStuck] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(null);
-  const stuckTimerRef = useRef(null);
-  
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [nmlsNumber, setNmlsNumber] = useState('');
+  // Check if we're on a consumer quote page or reset password (public, no auth needed)
+  const isPublicPage = window.location.pathname.startsWith('/q/') || 
+                       window.location.pathname === '/reset-password';
 
-  // Cleanup stuck timer on unmount
+  // Check for recovery token in URL hash on initial load
   useEffect(() => {
-    return () => {
-      if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current);
-    };
+    const hash = window.location.hash;
+    if (hash && hash.includes('type=recovery')) {
+      console.log('Recovery token detected in URL');
+      setIsRecoveryMode(true);
+      setLoading(false);
+    }
   }, []);
 
-  // Clear messages when switching modes
+  // Clear all Supabase auth storage
+  const clearAllAuthStorage = () => {
+    console.log('Clearing all auth storage...');
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith('sb-') || key.includes('supabase') || key.includes('auth'))) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(key => {
+      console.log('Removing:', key);
+      localStorage.removeItem(key);
+    });
+    
+    const sessionKeysToRemove = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      if (key && (key.startsWith('sb-') || key.includes('supabase') || key.includes('auth'))) {
+        sessionKeysToRemove.push(key);
+      }
+    }
+    sessionKeysToRemove.forEach(key => sessionStorage.removeItem(key));
+  };
+
   useEffect(() => {
-    setError(null);
-    setSuccess(null);
-  }, [mode]);
-
-  // Check if email domain is allowed
-  const isAllowedDomain = (email) => {
-    const domain = email.split('@')[1]?.toLowerCase();
-    return ALLOWED_DOMAINS.includes(domain);
-  };
-
-  // Handle reset when login is stuck (Edge browser issue)
-  const handleReset = () => {
-    console.log('Resetting auth state...');
-    
-    // Clear all localStorage
-    try {
-      localStorage.clear();
-      sessionStorage.clear();
-    } catch (e) {
-      console.log('Storage clear error:', e);
+    // Skip if recovery mode
+    if (isRecoveryMode) {
+      return;
     }
-    
-    // Force sign out
-    supabase.auth.signOut().catch(() => {});
-    
-    // Reload page
-    window.location.reload();
-  };
 
-  const formatPhoneNumber = (value) => {
-    const cleaned = value.replace(/\D/g, '');
-    const match = cleaned.match(/^(\d{0,3})(\d{0,3})(\d{0,4})$/);
-    if (match) {
-      let formatted = '';
-      if (match[1]) formatted = `(${match[1]}`;
-      if (match[1]?.length === 3) formatted += ') ';
-      if (match[2]) formatted += match[2];
-      if (match[2]?.length === 3) formatted += '-';
-      if (match[3]) formatted += match[3];
-      return formatted;
+    // Skip auth checking entirely on consumer quote pages
+    if (isPublicPage) {
+      console.log('Public page - skipping auth check');
+      setLoading(false);
+      return;
     }
-    return value;
-  };
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setLoginStuck(false);
-    setError(null);
+    let isMounted = true;
+    
+    // FAILSAFE: Force loading to false after 5 seconds no matter what
+    const failsafeTimeout = setTimeout(() => {
+      if (isMounted && loading) {
+        console.log('Failsafe timeout - forcing loading to false');
+        setLoading(false);
+      }
+    }, 5000);
 
-    // Start stuck detection timer
-    stuckTimerRef.current = setTimeout(() => {
-      console.log('Login appears stuck, showing reset option');
-      setLoginStuck(true);
-    }, 20000);
+    const init = async () => {
+      try {
+        await checkSession();
+      } finally {
+        if (isMounted) {
+          clearTimeout(failsafeTimeout);
+          setLoading(false);
+        }
+      }
+    };
+    
+    init();
 
-    try {
-      console.log('Attempting login for:', email);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state change:', event, session?.user?.email);
       
-      // Step 1: Sign in with Supabase Auth
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-      
-      if (authError) {
-        clearTimeout(stuckTimerRef.current);
-        console.error('Auth error:', authError);
-        setError(authError.message);
+      if (event === 'PASSWORD_RECOVERY') {
+        console.log('PASSWORD_RECOVERY event - entering recovery mode');
+        setIsRecoveryMode(true);
         setLoading(false);
         return;
       }
       
-      if (!data?.user || !data?.session) {
-        clearTimeout(stuckTimerRef.current);
-        setError('Login failed. Please try again.');
-        setLoading(false);
+      if (event === 'SIGNED_OUT') {
+        console.log('User signed out');
+        clearAccessToken(); // Clear cached token
+        setUser(null);
+        setLoanOfficer(null);
+      } else if (event === 'SIGNED_IN' && session?.user) {
+        console.log('User signed in, loading loan officer...');
+        // Cache the access token for Edge browser compatibility
+        if (session.access_token) {
+          setAccessToken(session.access_token);
+        }
+        // Set user immediately so we don't stay stuck
+        setUser(session.user);
+        // Then try to load loan officer
+        const lo = await loadLoanOfficerWithTimeout(session.user.email);
+        if (lo) {
+          console.log('Loan officer loaded successfully:', lo.full_name);
+          setLoanOfficer(lo);
+        } else {
+          console.error('Failed to load loan officer - user may not be authorized');
+          // Don't clear user - let the UI show an error
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      clearTimeout(failsafeTimeout);
+      subscription.unsubscribe();
+    };
+  }, [isRecoveryMode]);
+
+  const checkSession = async () => {
+    try {
+      console.log('Checking session...');
+      
+      // Wrap getSession in a timeout promise
+      const getSessionWithTimeout = () => {
+        return new Promise(async (resolve) => {
+          const timeout = setTimeout(() => {
+            console.log('getSession timed out');
+            resolve({ data: { session: null }, error: new Error('Timeout') });
+          }, 8000);
+          
+          try {
+            const result = await supabase.auth.getSession();
+            clearTimeout(timeout);
+            resolve(result);
+          } catch (err) {
+            clearTimeout(timeout);
+            resolve({ data: { session: null }, error: err });
+          }
+        });
+      };
+      
+      const { data: { session }, error } = await getSessionWithTimeout();
+      
+      if (error && error.message !== 'Timeout') {
+        console.log('Session check error:', error.message);
+        clearAllAuthStorage();
         return;
       }
       
-      console.log('Auth successful, user:', data.user.email);
+      if (error?.message === 'Timeout') {
+        console.log('Session check timed out - showing login screen');
+        return;
+      }
       
-      // Step 2: Fetch loan officer using REST API directly (bypass Supabase client)
-      console.log('Fetching LO profile via REST API...');
+      console.log('Session result:', session ? 'Found' : 'None');
       
-      const SUPABASE_URL = 'https://exghqseevcxdlckzqskc.supabase.co';
-      const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4Z2hxc2VldmN4ZGxja3pxc2tjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY4MTY0MDksImV4cCI6MjA4MjM5MjQwOX0.Om4FYmM_YIvSf7bFVxPQTFU2EFjK2CpY7B6F7Uka3mU';
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-      
-      let lo = null;
+      if (session?.user) {
+        // Cache the access token for Edge browser compatibility
+        if (session.access_token) {
+          setAccessToken(session.access_token);
+        }
+        setUser(session.user);
+        const lo = await loadLoanOfficerWithTimeout(session.user.email);
+        if (lo) {
+          setLoanOfficer(lo);
+        }
+      }
+    } catch (error) {
+      console.error('Session check error:', error);
+      if (error.message?.includes('auth') || error.message?.includes('token')) {
+        clearAllAuthStorage();
+      }
+    }
+  };
+
+  // Load loan officer with timeout protection
+  const loadLoanOfficerWithTimeout = async (email) => {
+    console.log('Loading loan officer for:', email);
+    
+    return new Promise(async (resolve) => {
+      const timeout = setTimeout(() => {
+        console.error('loadLoanOfficer timed out');
+        resolve(null);
+      }, 10000); // 10 second timeout
       
       try {
-        const response = await fetch(
-          `${SUPABASE_URL}/rest/v1/loan_officers?email=eq.${encodeURIComponent(email.toLowerCase())}&select=*`,
-          {
-            method: 'GET',
-            headers: {
-              'apikey': SUPABASE_ANON_KEY,
-              'Authorization': `Bearer ${data.session.access_token}`,
-              'Content-Type': 'application/json',
-              'Prefer': 'return=representation'
-            },
-            signal: controller.signal
-          }
-        );
-        
-        clearTimeout(timeoutId);
-        
-        if (response.ok) {
-          const loData = await response.json();
-          console.log('LO fetch response:', loData);
-          if (loData && loData.length > 0) {
-            lo = loData[0];
-          }
-        } else {
-          console.error('LO fetch failed:', response.status, response.statusText);
+        const { data: lo, error } = await supabase
+          .from('loan_officers')
+          .select('*')
+          .eq('email', email.toLowerCase())
+          .single();
+
+        clearTimeout(timeout);
+
+        if (error) {
+          console.error('Error loading loan officer:', error);
+          resolve(null);
+          return;
         }
-      } catch (fetchErr) {
-        clearTimeout(timeoutId);
-        console.error('LO fetch error:', fetchErr);
+
+        if (!lo) {
+          console.error('No loan officer found for email:', email);
+          resolve(null);
+          return;
+        }
+
+        if (!lo.is_active) {
+          console.error('Loan officer is not active:', email);
+          resolve(null);
+          return;
+        }
+
+        console.log('Loan officer loaded:', lo.full_name);
+        resolve(lo);
+      } catch (err) {
+        clearTimeout(timeout);
+        console.error('Exception loading loan officer:', err);
+        resolve(null);
       }
-
-      clearTimeout(stuckTimerRef.current);
-
-      if (!lo) {
-        console.error('Could not load loan officer profile');
-        setError('Could not load your profile. Please try again or use a different browser.');
-        setLoginStuck(true);
-        await supabase.auth.signOut();
-        setLoading(false);
-        return;
-      }
-
-      if (!lo.is_active) {
-        setError('Your account has been deactivated.');
-        await supabase.auth.signOut();
-        setLoading(false);
-        return;
-      }
-
-      console.log('Login complete! LO:', lo.full_name);
-      onAuthSuccess(data.user, lo);
-
-    } catch (err) {
-      clearTimeout(stuckTimerRef.current);
-      console.error('Login error:', err);
-      setError(err.message || 'Login failed. Please try again.');
-      setLoading(false);
-    }
+    });
   };
 
-  const handleSignUp = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    // Check email domain
-    if (!isAllowedDomain(email)) {
-      setError('Sign up is restricted to @clientdirectmtg.com email addresses.');
-      setLoading(false);
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      setLoading(false);
-      return;
-    }
-
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password
-      });
-
-      if (error) throw error;
-
-      const { data: lo, error: loError } = await supabase
-        .from('loan_officers')
-        .insert({
-          email: email.toLowerCase(),
-          full_name: fullName,
-          phone: phone || null,
-          nmls_number: nmlsNumber || null,
-          title: 'Loan Officer',
-          is_active: true,
-          is_admin: false
-        })
-        .select()
-        .single();
-
-      if (loError) throw loError;
-
-      onAuthSuccess(data.user, lo);
-
-    } catch (err) {
-      setError(err.message || 'Sign up failed.');
-    } finally {
-      setLoading(false);
-    }
+  const handleAuthSuccess = (authUser, lo) => {
+    console.log('handleAuthSuccess called:', authUser?.email, lo?.full_name);
+    setUser(authUser);
+    setLoanOfficer(lo);
   };
 
-  const handleForgotPassword = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setSuccess(null);
-
-    if (!email) {
-      setError('Please enter your email address.');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`
-      });
-
-      if (error) throw error;
-
-      setSuccess('Password reset email sent! Check your inbox.');
-      
-    } catch (err) {
-      setError(err.message || 'Failed to send reset email.');
-    } finally {
-      setLoading(false);
-    }
+  const handleSignOut = async () => {
+    clearAccessToken(); // Clear cached token
+    await supabase.auth.signOut();
+    setUser(null);
+    setLoanOfficer(null);
   };
 
-  return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)',
-      padding: '20px',
-      fontFamily: "'Outfit', -apple-system, sans-serif"
-    }}>
+  // If recovery mode, show reset password page directly
+  if (isRecoveryMode) {
+    return <ResetPassword />;
+  }
+
+  // Loading state - but skip for consumer quote pages
+  if (loading && !isPublicPage) {
+    return (
       <div style={{
-        background: 'white',
-        borderRadius: '24px',
-        padding: '40px',
-        width: '100%',
-        maxWidth: '420px',
-        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)',
+        color: 'white',
+        fontFamily: "'Outfit', sans-serif"
       }}>
-        {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <svg width="60" height="60" viewBox="0 0 100 100">
-            <defs>
-              <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#7B2CBF" />
-                <stop offset="100%" stopColor="#9D4EDD" />
-              </linearGradient>
-            </defs>
-            <rect x="47" y="5" width="6" height="25" fill="url(#logoGrad)" transform="rotate(0, 50, 50)" />
-            <rect x="47" y="5" width="6" height="22" fill="url(#logoGrad)" transform="rotate(-25, 50, 50)" />
-            <rect x="47" y="5" width="6" height="22" fill="url(#logoGrad)" transform="rotate(25, 50, 50)" />
-            <rect x="47" y="5" width="6" height="18" fill="url(#logoGrad)" transform="rotate(-50, 50, 50)" />
-            <rect x="47" y="5" width="6" height="18" fill="url(#logoGrad)" transform="rotate(50, 50, 50)" />
-            <rect x="47" y="5" width="6" height="14" fill="url(#logoGrad)" transform="rotate(-75, 50, 50)" />
-            <rect x="47" y="5" width="6" height="14" fill="url(#logoGrad)" transform="rotate(75, 50, 50)" />
-            <rect x="47" y="5" width="6" height="10" fill="url(#logoGrad)" transform="rotate(-100, 50, 50)" />
-            <rect x="47" y="5" width="6" height="10" fill="url(#logoGrad)" transform="rotate(100, 50, 50)" />
-            <rect x="47" y="5" width="6" height="6" fill="url(#logoGrad)" transform="rotate(-125, 50, 50)" />
-            <rect x="47" y="5" width="6" height="6" fill="url(#logoGrad)" transform="rotate(125, 50, 50)" />
-          </svg>
-          <h1 style={{ fontSize: '28px', fontWeight: '800', marginTop: '16px', color: '#1a1a1a' }}>
-            CDM Quote Pro
-          </h1>
-          <p style={{ color: '#888', fontSize: '14px', marginTop: '4px' }}>
-            {mode === 'login' && 'Sign in to your account'}
-            {mode === 'signup' && 'Create your account'}
-            {mode === 'forgot' && 'Reset your password'}
-          </p>
-        </div>
-
-        {/* Error Message */}
-        {error && (
-          <div style={{
-            background: '#fee2e2',
-            border: '1px solid #fecaca',
-            borderRadius: '12px',
-            padding: '12px 16px',
-            marginBottom: '20px',
-            color: '#dc2626',
-            fontSize: '14px'
-          }}>
-            {error}
-          </div>
-        )}
-
-        {/* Success Message */}
-        {success && (
-          <div style={{
-            background: '#dcfce7',
-            border: '1px solid #bbf7d0',
-            borderRadius: '12px',
-            padding: '12px 16px',
-            marginBottom: '20px',
-            color: '#166534',
-            fontSize: '14px'
-          }}>
-            {success}
-          </div>
-        )}
-
-        {/* Login Form */}
-        {mode === 'login' && (
-          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div>
-              <label style={{ fontSize: '13px', fontWeight: '600', color: '#333', display: 'block', marginBottom: '6px' }}>
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@clientdirectmtg.com"
-                required
-                style={{
-                  width: '100%',
-                  padding: '14px 16px',
-                  border: '2px solid #e0e0e0',
-                  borderRadius: '12px',
-                  fontSize: '15px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: '13px', fontWeight: '600', color: '#333', display: 'block', marginBottom: '6px' }}>
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                style={{
-                  width: '100%',
-                  padding: '14px 16px',
-                  border: '2px solid #e0e0e0',
-                  borderRadius: '12px',
-                  fontSize: '15px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-            
-            {/* Forgot Password Link */}
-            <div style={{ textAlign: 'right', marginTop: '-8px' }}>
-              <button
-                type="button"
-                onClick={() => setMode('forgot')}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#7B2CBF',
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  padding: 0
-                }}
-              >
-                Forgot password?
-              </button>
-            </div>
-            
-            <button 
-              type="submit" 
-              disabled={loading}
-              style={{
-                padding: '16px',
-                background: 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '12px',
-                fontSize: '16px',
-                fontWeight: '700',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.7 : 1,
-                marginTop: '8px'
-              }}
-            >
-              {loading ? 'Signing in...' : 'Sign In'}
-            </button>
-            
-            {/* Reset button - appears when login is stuck (Edge browser issue) */}
-            {loginStuck && (
-              <button
-                type="button"
-                onClick={handleReset}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  background: '#fee2e2',
-                  color: '#dc2626',
-                  border: '2px solid #fecaca',
-                  borderRadius: '12px',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  marginTop: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px'
-                }}
-              >
-                <span>🔄</span> Reset & Try Again
-              </button>
-            )}
-            
-            {/* Sign Up Link */}
-            <div style={{ textAlign: 'center', marginTop: '16px' }}>
-              <span style={{ color: '#888', fontSize: '14px' }}>Don't have an account? </span>
-              <button
-                type="button"
-                onClick={() => setMode('signup')}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#7B2CBF',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  padding: 0
-                }}
-              >
-                Sign up
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Forgot Password Form */}
-        {mode === 'forgot' && (
-          <form onSubmit={handleForgotPassword} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <p style={{ color: '#666', fontSize: '14px', marginBottom: '8px' }}>
-              Enter your email address and we'll send you a link to reset your password.
-            </p>
-            <div>
-              <label style={{ fontSize: '13px', fontWeight: '600', color: '#333', display: 'block', marginBottom: '6px' }}>
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@clientdirectmtg.com"
-                required
-                style={{
-                  width: '100%',
-                  padding: '14px 16px',
-                  border: '2px solid #e0e0e0',
-                  borderRadius: '12px',
-                  fontSize: '15px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-            <button 
-              type="submit" 
-              disabled={loading}
-              style={{
-                padding: '16px',
-                background: 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '12px',
-                fontSize: '16px',
-                fontWeight: '700',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.7 : 1,
-                marginTop: '8px'
-              }}
-            >
-              {loading ? 'Sending...' : 'Send Reset Link'}
-            </button>
-            
-            {/* Back to Login */}
-            <div style={{ textAlign: 'center', marginTop: '16px' }}>
-              <button
-                type="button"
-                onClick={() => setMode('login')}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#7B2CBF',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  padding: 0
-                }}
-              >
-                ← Back to Sign In
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Sign Up Form */}
-        {mode === 'signup' && (
-          <form onSubmit={handleSignUp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Domain Notice */}
-            <div style={{
-              background: '#f0f9ff',
-              border: '1px solid #bae6fd',
-              borderRadius: '12px',
-              padding: '12px 16px',
-              color: '#0369a1',
-              fontSize: '13px'
-            }}>
-              🔒 Sign up is restricted to <strong>@clientdirectmtg.com</strong> email addresses.
-            </div>
-            
-            <div>
-              <label style={{ fontSize: '13px', fontWeight: '600', color: '#333', display: 'block', marginBottom: '6px' }}>
-                Full Name *
-              </label>
-              <input
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="John Smith"
-                required
-                style={{
-                  width: '100%',
-                  padding: '14px 16px',
-                  border: '2px solid #e0e0e0',
-                  borderRadius: '12px',
-                  fontSize: '15px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: '13px', fontWeight: '600', color: '#333', display: 'block', marginBottom: '6px' }}>
-                Email *
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@clientdirectmtg.com"
-                required
-                style={{
-                  width: '100%',
-                  padding: '14px 16px',
-                  border: '2px solid #e0e0e0',
-                  borderRadius: '12px',
-                  fontSize: '15px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <label style={{ fontSize: '13px', fontWeight: '600', color: '#333', display: 'block', marginBottom: '6px' }}>
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(formatPhoneNumber(e.target.value))}
-                  placeholder="(555) 000-0000"
-                  style={{
-                    width: '100%',
-                    padding: '14px 16px',
-                    border: '2px solid #e0e0e0',
-                    borderRadius: '12px',
-                    fontSize: '15px',
-                    outline: 'none'
-                  }}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: '13px', fontWeight: '600', color: '#333', display: 'block', marginBottom: '6px' }}>
-                  NMLS #
-                </label>
-                <input
-                  type="text"
-                  value={nmlsNumber}
-                  onChange={(e) => setNmlsNumber(e.target.value)}
-                  placeholder="123456"
-                  style={{
-                    width: '100%',
-                    padding: '14px 16px',
-                    border: '2px solid #e0e0e0',
-                    borderRadius: '12px',
-                    fontSize: '15px',
-                    outline: 'none'
-                  }}
-                />
-              </div>
-            </div>
-            <div>
-              <label style={{ fontSize: '13px', fontWeight: '600', color: '#333', display: 'block', marginBottom: '6px' }}>
-                Password *
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
-                required
-                style={{
-                  width: '100%',
-                  padding: '14px 16px',
-                  border: '2px solid #e0e0e0',
-                  borderRadius: '12px',
-                  fontSize: '15px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: '13px', fontWeight: '600', color: '#333', display: 'block', marginBottom: '6px' }}>
-                Confirm Password *
-              </label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                style={{
-                  width: '100%',
-                  padding: '14px 16px',
-                  border: '2px solid #e0e0e0',
-                  borderRadius: '12px',
-                  fontSize: '15px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-            <button 
-              type="submit" 
-              disabled={loading}
-              style={{
-                padding: '16px',
-                background: 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '12px',
-                fontSize: '16px',
-                fontWeight: '700',
-                cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.7 : 1,
-                marginTop: '8px'
-              }}
-            >
-              {loading ? 'Creating Account...' : 'Create Account'}
-            </button>
-            
-            {/* Back to Login */}
-            <div style={{ textAlign: 'center', marginTop: '16px' }}>
-              <span style={{ color: '#888', fontSize: '14px' }}>Already have an account? </span>
-              <button
-                type="button"
-                onClick={() => setMode('login')}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#7B2CBF',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  padding: 0
-                }}
-              >
-                Sign in
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* Footer */}
-        <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '13px', color: '#888' }}>
-          <p>Client Direct Mortgage</p>
-          <p style={{ marginTop: '4px', fontSize: '11px', color: '#aaa' }}>
-            Equal Housing Lender
-          </p>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ 
+            width: '48px', 
+            height: '48px', 
+            border: '3px solid rgba(255,255,255,0.3)', 
+            borderTopColor: '#7B2CBF',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 16px'
+          }} />
+          <div>Loading...</div>
+          <button
+            onClick={() => {
+              localStorage.clear();
+              sessionStorage.clear();
+              window.location.reload();
+            }}
+            style={{
+              marginTop: '24px',
+              padding: '10px 20px',
+              background: 'transparent',
+              border: '1px solid rgba(255,255,255,0.3)',
+              borderRadius: '8px',
+              color: 'rgba(255,255,255,0.7)',
+              fontSize: '13px',
+              cursor: 'pointer'
+            }}
+          >
+            Having trouble? Click to reset
+          </button>
+          <style>{`
+            @keyframes spin {
+              to { transform: rotate(360deg); }
+            }
+          `}</style>
         </div>
       </div>
-    </div>
-  );
-};
+    );
+  }
 
-export default AuthComponent;
+  return (
+    <Routes>
+      {/* Consumer Quote View - Public, no auth required */}
+      <Route path="/q/:shareId" element={<ConsumerQuoteView />} />
+      
+      {/* Password Reset - Public, no auth required */}
+      <Route path="/reset-password" element={<ResetPassword />} />
+      
+      {/* Login Page */}
+      <Route 
+        path="/login" 
+        element={
+          user && loanOfficer ? (
+            <Navigate to="/" replace />
+          ) : (
+            <AuthComponent onAuthSuccess={handleAuthSuccess} />
+          )
+        } 
+      />
+      
+      {/* Main App - Requires auth */}
+      <Route 
+        path="/*" 
+        element={
+          user && loanOfficer ? (
+            <QuotePro 
+              user={user} 
+              loanOfficer={loanOfficer} 
+              onSignOut={handleSignOut}
+            />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        } 
+      />
+    </Routes>
+  );
+}
+
+export default App;
