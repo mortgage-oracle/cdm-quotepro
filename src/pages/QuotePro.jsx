@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application 29 V29
+// CDM QUOTE PRO - Main Application 25 V29
 // ============================================================================
 
 // ============================================================================
