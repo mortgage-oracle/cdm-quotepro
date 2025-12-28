@@ -1,12 +1,12 @@
 // ============================================================================
-// CDM QUOTE PRO - MAIN APP V8
+// CDM QUOTE PRO - MAIN APP V9
 // Routes between LO tool and consumer quote view
 // Fixed: Login loop issue in Edge browser
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { supabase } from './supabaseClient';
+import { supabase, setAccessToken, clearAccessToken } from './supabaseClient';
 import AuthComponent from './components/AuthComponent';
 import QuotePro from './pages/QuotePro';
 import ConsumerQuoteView from './pages/ConsumerQuoteView';
@@ -105,10 +105,15 @@ function App() {
       
       if (event === 'SIGNED_OUT') {
         console.log('User signed out');
+        clearAccessToken(); // Clear cached token
         setUser(null);
         setLoanOfficer(null);
       } else if (event === 'SIGNED_IN' && session?.user) {
         console.log('User signed in, loading loan officer...');
+        // Cache the access token for Edge browser compatibility
+        if (session.access_token) {
+          setAccessToken(session.access_token);
+        }
         // Set user immediately so we don't stay stuck
         setUser(session.user);
         // Then try to load loan officer
@@ -169,6 +174,10 @@ function App() {
       console.log('Session result:', session ? 'Found' : 'None');
       
       if (session?.user) {
+        // Cache the access token for Edge browser compatibility
+        if (session.access_token) {
+          setAccessToken(session.access_token);
+        }
         setUser(session.user);
         const lo = await loadLoanOfficerWithTimeout(session.user.email);
         if (lo) {
@@ -237,6 +246,7 @@ function App() {
   };
 
   const handleSignOut = async () => {
+    clearAccessToken(); // Clear cached token
     await supabase.auth.signOut();
     setUser(null);
     setLoanOfficer(null);
