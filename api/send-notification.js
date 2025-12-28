@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-  // Only allow POST requests
+  // Only allow POST requests V3
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -8,9 +8,13 @@ export default async function handler(req, res) {
     const { 
       loanOfficerEmail, 
       loanOfficerName,
-      clientName, 
+      clientName,
+      clientEmail,
+      clientPhone,
       quoteLabel,
-      quoteType
+      quoteType,
+      propertyAddress,
+      loanAmount
     } = req.body || {};
 
     // Validate required fields
@@ -25,6 +29,52 @@ export default async function handler(req, res) {
 
     const appUrl = 'https://www.cdmquotepro.com';
     const quoteTypeLabel = quoteType === 'home_equity' ? 'Home Equity' : 'Purchase/Refi';
+    
+    // Format loan amount
+    const formattedLoanAmount = loanAmount 
+      ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(loanAmount)
+      : null;
+
+    // Build contact section
+    let contactSection = '';
+    if (clientPhone || clientEmail) {
+      contactSection = `
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
+          <tr>
+            <td style="padding: 16px; background-color: #f0fdf4; border-radius: 12px; border-left: 4px solid #22c55e;">
+              <p style="margin: 0 0 8px; color: #166534; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                📞 Contact Client Now
+              </p>
+              ${clientPhone ? `<p style="margin: 0 0 4px; color: #333333; font-size: 16px;"><a href="tel:${clientPhone.replace(/[^0-9]/g, '')}" style="color: #166534; text-decoration: none; font-weight: 600;">${clientPhone}</a></p>` : ''}
+              ${clientEmail ? `<p style="margin: 0; color: #666666; font-size: 14px;"><a href="mailto:${clientEmail}" style="color: #166534; text-decoration: none;">${clientEmail}</a></p>` : ''}
+            </td>
+          </tr>
+        </table>
+      `;
+    }
+
+    // Build details list
+    let detailsList = '';
+    if (formattedLoanAmount || propertyAddress) {
+      detailsList = `
+        <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 12px;">
+          ${formattedLoanAmount ? `
+          <tr>
+            <td style="padding: 6px 0; color: #666666; font-size: 14px;">
+              💰 <strong>${formattedLoanAmount}</strong> loan amount
+            </td>
+          </tr>
+          ` : ''}
+          ${propertyAddress ? `
+          <tr>
+            <td style="padding: 6px 0; color: #666666; font-size: 14px;">
+              🏠 ${propertyAddress}
+            </td>
+          </tr>
+          ` : ''}
+        </table>
+      `;
+    }
 
     const emailHtml = `
       <!DOCTYPE html>
@@ -39,6 +89,7 @@ export default async function handler(req, res) {
             <td align="center">
               <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 500px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
                 
+                <!-- Header -->
                 <tr>
                   <td style="background: linear-gradient(135deg, #7B2CBF 0%, #3C096C 100%); padding: 32px; text-align: center;">
                     <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">
@@ -47,16 +98,21 @@ export default async function handler(req, res) {
                   </td>
                 </tr>
                 
+                <!-- Content -->
                 <tr>
                   <td style="padding: 32px;">
                     <p style="margin: 0 0 24px; color: #333333; font-size: 16px; line-height: 1.5;">
                       Hi ${loanOfficerName || 'there'},
                     </p>
                     
-                    <p style="margin: 0 0 24px; color: #333333; font-size: 16px; line-height: 1.5;">
+                    <p style="margin: 0 0 24px; color: #333333; font-size: 18px; line-height: 1.5;">
                       <strong>${clientName}</strong> just viewed the quote you sent them.
                     </p>
                     
+                    <!-- Contact Section -->
+                    ${contactSection}
+                    
+                    <!-- Quote Details Card -->
                     <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8f8f8; border-radius: 12px; margin-bottom: 24px;">
                       <tr>
                         <td style="padding: 20px;">
@@ -69,6 +125,7 @@ export default async function handler(req, res) {
                           <p style="margin: 0; color: #666666; font-size: 14px;">
                             ${quoteTypeLabel}
                           </p>
+                          ${detailsList}
                         </td>
                       </tr>
                     </table>
@@ -77,10 +134,20 @@ export default async function handler(req, res) {
                       Now is a great time to follow up while they're actively reviewing options!
                     </p>
                     
+                    <!-- CTA Buttons -->
                     <table width="100%" cellpadding="0" cellspacing="0">
+                      ${clientPhone ? `
+                      <tr>
+                        <td align="center" style="padding-bottom: 12px;">
+                          <a href="tel:${clientPhone.replace(/[^0-9]/g, '')}" style="display: inline-block; background: #22c55e; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 14px; width: 200px; text-align: center;">
+                            📞 Call ${clientName.split(' ')[0]}
+                          </a>
+                        </td>
+                      </tr>
+                      ` : ''}
                       <tr>
                         <td align="center">
-                          <a href="${appUrl}" style="display: inline-block; background: linear-gradient(135deg, #7B2CBF 0%, #9D4EDD 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 14px;">
+                          <a href="${appUrl}" style="display: inline-block; background: linear-gradient(135deg, #7B2CBF 0%, #9D4EDD 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 14px; width: 200px; text-align: center;">
                             Open CDM Quote Pro
                           </a>
                         </td>
@@ -89,10 +156,14 @@ export default async function handler(req, res) {
                   </td>
                 </tr>
                 
+                <!-- Footer -->
                 <tr>
                   <td style="padding: 24px 32px; border-top: 1px solid #e0e0e0; text-align: center;">
                     <p style="margin: 0; color: #888888; font-size: 12px;">
                       CDM Quote Pro • Client Direct Mortgage
+                    </p>
+                    <p style="margin: 8px 0 0; color: #aaaaaa; font-size: 11px;">
+                      <a href="${appUrl}" style="color: #7B2CBF; text-decoration: none;">${appUrl}</a>
                     </p>
                   </td>
                 </tr>
