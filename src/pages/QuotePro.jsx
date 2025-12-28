@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V23
+// CDM QUOTE PRO - Main Application V24
 // ============================================================================
 
 // ============================================================================
@@ -1151,6 +1151,43 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
   // Handlers
   const handleClientChange = (field, value) => setClientInfo(prev => ({ ...prev, [field]: value }));
   
+  // Reset form for new client
+  const resetClientForm = () => {
+    if (window.confirm('Start a new quote? This will clear the current client information and reset the form.')) {
+      setClientInfo({
+        name: '', email: '', phone: '',
+        address: '', city: '', state: 'CA', zip: ''
+      });
+      setQuoteLabel('');
+      // Reset to defaults
+      setBaseLoanAmount(400000);
+      setPropertyDetails({
+        purchasePrice: 500000,
+        downPaymentPercent: 20,
+        homeValue: 500000,
+        currentBalance: 200000,
+        desiredCash: 50000,
+        propertyType: 'single',
+        occupancy: 'primary'
+      });
+      setLoanPurpose('purchase');
+      setLoanProgram('conventional');
+      setTerm(30);
+      setCreditScore(740);
+      setRateType('fixed');
+      setRecommendedQuote(null);
+      // Reset Home Equity too
+      setSecondMortgageDetails({
+        firstMortgageBalance: 350000,
+        propertyValue: 700000,
+        lineAmount: 100000,
+        drawAmount: 50000,
+        cltv: 0.7143
+      });
+      setRecommendedSecondMortgage(null);
+    }
+  };
+  
   // Profile editing state
   const [profileEdits, setProfileEdits] = useState({});
   const [savingProfile, setSavingProfile] = useState(false);
@@ -2236,7 +2273,29 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
               
               {/* Client Info */}
               <div className="card animate-in">
-                <h3 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '16px' }}>Client Information</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ fontSize: '15px', fontWeight: '600', margin: 0 }}>Client Information</h3>
+                  <button
+                    onClick={resetClientForm}
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      padding: '6px 12px',
+                      fontSize: '11px',
+                      color: '#666',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseOver={(e) => { e.target.style.borderColor = '#7B2CBF'; e.target.style.color = '#7B2CBF'; }}
+                    onMouseOut={(e) => { e.target.style.borderColor = '#ddd'; e.target.style.color = '#666'; }}
+                  >
+                    <span>+</span> New Client
+                  </button>
+                </div>
                 <div style={{ display: 'grid', gap: '12px' }}>
                   <div>
                     <label className="label">Client Name</label>
@@ -3454,9 +3513,31 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
               
               {/* Client Information - Shared with Purchase/Refi */}
               <div className="card animate-in">
-                <h3 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>👤</span> Client Information
-                </h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ fontSize: '15px', fontWeight: '600', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>👤</span> Client Information
+                  </h3>
+                  <button
+                    onClick={resetClientForm}
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      padding: '6px 12px',
+                      fontSize: '11px',
+                      color: '#666',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseOver={(e) => { e.target.style.borderColor = '#7B2CBF'; e.target.style.color = '#7B2CBF'; }}
+                    onMouseOut={(e) => { e.target.style.borderColor = '#ddd'; e.target.style.color = '#666'; }}
+                  >
+                    <span>+</span> New Client
+                  </button>
+                </div>
                 <div style={{ display: 'grid', gap: '12px' }}>
                   <div>
                     <label className="label">Client Name</label>
