@@ -1,5 +1,5 @@
 // ============================================================================
-// CDM QUOTE PRO - MAIN APP V5
+// CDM QUOTE PRO - MAIN APP V6
 // Routes between LO tool and consumer quote view
 // ============================================================================
 
@@ -9,14 +9,16 @@ import { supabase } from './supabaseClient';
 import AuthComponent from './components/AuthComponent';
 import QuotePro from './pages/QuotePro';
 import ConsumerQuoteView from './pages/ConsumerQuoteView';
+import ResetPassword from './pages/ResetPassword';
 
 function App() {
   const [user, setUser] = useState(null);
   const [loanOfficer, setLoanOfficer] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Check if we're on a consumer quote page (public, no auth needed)
-  const isConsumerQuotePage = window.location.pathname.startsWith('/q/');
+  // Check if we're on a consumer quote page or reset password (public, no auth needed)
+  const isPublicPage = window.location.pathname.startsWith('/q/') || 
+                       window.location.pathname === '/reset-password';
 
   // Clear all Supabase auth storage
   const clearAllAuthStorage = () => {
@@ -45,7 +47,7 @@ function App() {
 
   useEffect(() => {
     // Skip auth checking entirely on consumer quote pages
-    if (isConsumerQuotePage) {
+    if (isPublicPage) {
       console.log('Consumer quote page - skipping auth check');
       setLoading(false);
       return;
@@ -176,7 +178,7 @@ function App() {
   };
 
   // Loading state - but skip for consumer quote pages
-  if (loading && !isConsumerQuotePage) {
+  if (loading && !isPublicPage) {
     return (
       <div style={{
         minHeight: '100vh',
@@ -231,6 +233,9 @@ function App() {
     <Routes>
       {/* Consumer Quote View - Public, no auth required */}
       <Route path="/q/:shareId" element={<ConsumerQuoteView />} />
+      
+      {/* Password Reset - Public, no auth required */}
+      <Route path="/reset-password" element={<ResetPassword />} />
       
       {/* Login Page */}
       <Route 
