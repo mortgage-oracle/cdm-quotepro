@@ -1,5 +1,5 @@
 // ============================================================================
-// AUTHENTICATION COMPONENT V4
+// AUTHENTICATION COMPONENT V5
 // Login / Sign Up for Loan Officers
 // ============================================================================
 
@@ -83,11 +83,11 @@ const AuthComponent = ({ onAuthSuccess }) => {
     setLoginStuck(false);
     setError(null);
 
-    // Start stuck detection timer - shows reset option after 8 seconds
+    // Start stuck detection timer - shows reset option after 12 seconds (increased)
     stuckTimerRef.current = setTimeout(() => {
       console.log('Login appears stuck, showing reset option');
       setLoginStuck(true);
-    }, 8000);
+    }, 12000);
 
     try {
       console.log('Attempting login for:', email);
@@ -132,19 +132,31 @@ const AuthComponent = ({ onAuthSuccess }) => {
       
       console.log('Auth successful, user:', data.user.email);
       
-      // Step 2: Fetch loan officer profile
+      // Step 2: Fetch loan officer profile with timeout
       console.log('Fetching LO profile...');
-      const { data: lo, error: loError } = await supabase
+      
+      const loPromise = supabase
         .from('loan_officers')
         .select('*')
         .eq('email', email.toLowerCase())
         .single();
+      
+      const loTimeoutPromise = new Promise((resolve) => 
+        setTimeout(() => resolve({ data: null, error: new Error('LO fetch timeout') }), 10000)
+      );
+      
+      const { data: lo, error: loError } = await Promise.race([loPromise, loTimeoutPromise]);
 
       clearTimeout(stuckTimerRef.current);
 
       if (loError) {
         console.error('LO fetch error:', loError);
-        setError('No loan officer profile found. Please contact your administrator.');
+        if (loError.message === 'LO fetch timeout') {
+          setError('Loading profile timed out. Please click "Reset & Try Again".');
+          setLoginStuck(true);
+        } else {
+          setError('No loan officer profile found. Please contact your administrator.');
+        }
         await supabase.auth.signOut();
         setLoading(false);
         return;
