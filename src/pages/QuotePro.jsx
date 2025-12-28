@@ -2815,8 +2815,15 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   <button className="btn-secondary" onClick={openSaveModal}>Save Quote</button>
                   <button 
                     className="btn-primary" 
-                    onClick={() => {
-                      console.log('Share Quote button clicked');
+                    disabled={!loanOfficer?.id}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('Share Quote button clicked, loanOfficer:', loanOfficer?.id);
+                      if (!loanOfficer?.id) {
+                        alert('Session expired. Please refresh the page or log in again.');
+                        return;
+                      }
                       // Calculate detailed fees for each option
                       const detailedCalcs = calculations.slice(0, 3).map((calc, i) => {
                         const lendersTitle = (titleInsuranceRates[clientInfo.state] || 2.5) * (calc.totalLoanAmount / 1000);
@@ -3794,8 +3801,15 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   <button className="btn-secondary" onClick={openSaveModal}>Save Quote</button>
                   <button 
                     className="btn-primary" 
-                    onClick={() => {
-                      console.log('Home Equity Share Quote button clicked');
+                    disabled={!loanOfficer?.id}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      console.log('Home Equity Share Quote button clicked, loanOfficer:', loanOfficer?.id);
+                      if (!loanOfficer?.id) {
+                        alert('Session expired. Please refresh the page or log in again.');
+                        return;
+                      }
                       handleShareQuote({
                         label: quoteLabel || `Home Equity Quote for ${clientInfo.name || 'Client'}`,
                         quoteType: 'home_equity',
