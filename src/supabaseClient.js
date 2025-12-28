@@ -1,5 +1,5 @@
 // ============================================================================
-// SUPABASE CLIENT CONFIGURATION V4
+// SUPABASE CLIENT CONFIGURATION 4 V5
 // CDM Quote Pro - Database Connection
 // ============================================================================
 
