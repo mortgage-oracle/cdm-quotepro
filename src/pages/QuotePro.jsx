@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application 25 V29
+// CDM QUOTE PRO - Main Application 26 V30
 // ============================================================================
 
 // ============================================================================
@@ -5102,10 +5102,33 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
               </div>
               
               <div className="card" style={{ marginBottom: '20px' }}>
-                <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '20px' }}>Fee Templates</h2>
-                <p style={{ fontSize: '13px', color: '#666', marginBottom: '20px' }}>
-                  These defaults populate each new quote. Individual quotes can override any value.
-                </p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <div>
+                    <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '4px' }}>Fee Templates</h2>
+                    <p style={{ fontSize: '13px', color: '#666', margin: 0 }}>
+                      These defaults populate each new quote. Individual quotes can override any value.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleSaveFeeTemplates}
+                    disabled={savingFeeTemplates}
+                    style={{
+                      padding: '10px 20px',
+                      background: savingFeeTemplates ? '#ccc' : 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontWeight: '600',
+                      cursor: savingFeeTemplates ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {savingFeeTemplates ? '⏳ Saving...' : '💾 Save Templates'}
+                  </button>
+                </div>
                 
                 {/* Purchase/Refi Section Header */}
                 <div style={{ marginBottom: '20px', paddingBottom: '12px', borderBottom: '2px solid #7B2CBF' }}>
@@ -5337,38 +5360,6 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                       </div>
                     )}
                   </div>
-                </div>
-                
-                {/* Save Fee Templates Button */}
-                <div style={{ 
-                  marginTop: '24px', 
-                  paddingTop: '20px', 
-                  borderTop: '2px solid #eee',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <div style={{ fontSize: '13px', color: '#666' }}>
-                    Save these templates to persist across sessions
-                  </div>
-                  <button
-                    onClick={handleSaveFeeTemplates}
-                    disabled={savingFeeTemplates}
-                    style={{
-                      padding: '12px 24px',
-                      background: savingFeeTemplates ? '#ccc' : 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
-                      fontWeight: '600',
-                      cursor: savingFeeTemplates ? 'not-allowed' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
-                    }}
-                  >
-                    {savingFeeTemplates ? '⏳ Saving...' : '💾 Save Fee Templates'}
-                  </button>
                 </div>
               </div>
             </div>
