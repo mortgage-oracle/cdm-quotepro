@@ -1,5 +1,5 @@
 // ============================================================================
-// CONSUMER QUOTE VIEW PAGE V15
+// CONSUMER QUOTE VIEW PAGE V16
 // What borrowers see when they click their unique quote link
 // ============================================================================
 
@@ -55,6 +55,25 @@ const ConsumerQuoteView = () => {
         
         // Send email notification to loan officer (fire and forget)
         if (data.loan_officers?.email) {
+          // Extract client and property info from quote data
+          const quoteData = data.quote_data || {};
+          const clientInfo = quoteData.clientInfo || {};
+          const propertyDetails = quoteData.propertyDetails || {};
+          
+          // Build property address string
+          let propertyAddress = '';
+          if (clientInfo.address) {
+            propertyAddress = clientInfo.address;
+            if (clientInfo.city) propertyAddress += `, ${clientInfo.city}`;
+            if (clientInfo.state) propertyAddress += ` ${clientInfo.state}`;
+            if (clientInfo.zip) propertyAddress += ` ${clientInfo.zip}`;
+          }
+          
+          // Get loan amount
+          const loanAmount = quoteData.baseLoanAmount || 
+                            quoteData.secondMortgageDetails?.lineAmount || 
+                            null;
+          
           fetch('/api/send-notification', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -62,9 +81,12 @@ const ConsumerQuoteView = () => {
               loanOfficerEmail: data.loan_officers.email,
               loanOfficerName: data.loan_officers.full_name,
               clientName: data.client_name,
+              clientEmail: clientInfo.email || '',
+              clientPhone: clientInfo.phone || '',
               quoteLabel: data.label,
               quoteType: data.quote_type,
-              shareId: data.share_id
+              propertyAddress: propertyAddress,
+              loanAmount: loanAmount
             })
           }).catch(err => console.warn('Email notification failed:', err));
         }
