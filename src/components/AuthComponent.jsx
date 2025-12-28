@@ -1,5 +1,5 @@
 // ============================================================================
-// AUTHENTICATION COMPONENT V5
+// AUTHENTICATION COMPONENT V6
 // Login / Sign Up for Loan Officers
 // ============================================================================
 
@@ -83,37 +83,20 @@ const AuthComponent = ({ onAuthSuccess }) => {
     setLoginStuck(false);
     setError(null);
 
-    // Start stuck detection timer - shows reset option after 12 seconds (increased)
+    // Start stuck detection timer
     stuckTimerRef.current = setTimeout(() => {
       console.log('Login appears stuck, showing reset option');
       setLoginStuck(true);
-    }, 12000);
+    }, 20000);
 
     try {
       console.log('Attempting login for:', email);
       
-      // Step 1: Sign in with Supabase Auth - with timeout
-      const authPromise = supabase.auth.signInWithPassword({
+      // Step 1: Sign in with Supabase Auth
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password
       });
-      
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Login request timed out')), 15000)
-      );
-      
-      let authResult;
-      try {
-        authResult = await Promise.race([authPromise, timeoutPromise]);
-      } catch (timeoutErr) {
-        clearTimeout(stuckTimerRef.current);
-        setError('Login timed out. Please click "Reset & Try Again" below.');
-        setLoginStuck(true);
-        setLoading(false);
-        return;
-      }
-      
-      const { data, error: authError } = authResult;
       
       if (authError) {
         clearTimeout(stuckTimerRef.current);
@@ -123,7 +106,7 @@ const AuthComponent = ({ onAuthSuccess }) => {
         return;
       }
       
-      if (!data?.user) {
+      if (!data?.user || !data?.session) {
         clearTimeout(stuckTimerRef.current);
         setError('Login failed. Please try again.');
         setLoading(false);
@@ -132,38 +115,54 @@ const AuthComponent = ({ onAuthSuccess }) => {
       
       console.log('Auth successful, user:', data.user.email);
       
-      // Step 2: Fetch loan officer profile with timeout
-      console.log('Fetching LO profile...');
+      // Step 2: Fetch loan officer using REST API directly (bypass Supabase client)
+      console.log('Fetching LO profile via REST API...');
       
-      const loPromise = supabase
-        .from('loan_officers')
-        .select('*')
-        .eq('email', email.toLowerCase())
-        .single();
+      const SUPABASE_URL = 'https://exghqseevcxdlckzqskc.supabase.co';
+      const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV4Z2hxc2VldmN4ZGxja3pxc2tjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY4MTY0MDksImV4cCI6MjA4MjM5MjQwOX0.Om4FYmM_YIvSf7bFVxPQTFU2EFjK2CpY7B6F7Uka3mU';
       
-      const loTimeoutPromise = new Promise((resolve) => 
-        setTimeout(() => resolve({ data: null, error: new Error('LO fetch timeout') }), 10000)
-      );
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
       
-      const { data: lo, error: loError } = await Promise.race([loPromise, loTimeoutPromise]);
+      let lo = null;
+      
+      try {
+        const response = await fetch(
+          `${SUPABASE_URL}/rest/v1/loan_officers?email=eq.${encodeURIComponent(email.toLowerCase())}&select=*`,
+          {
+            method: 'GET',
+            headers: {
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${data.session.access_token}`,
+              'Content-Type': 'application/json',
+              'Prefer': 'return=representation'
+            },
+            signal: controller.signal
+          }
+        );
+        
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+          const loData = await response.json();
+          console.log('LO fetch response:', loData);
+          if (loData && loData.length > 0) {
+            lo = loData[0];
+          }
+        } else {
+          console.error('LO fetch failed:', response.status, response.statusText);
+        }
+      } catch (fetchErr) {
+        clearTimeout(timeoutId);
+        console.error('LO fetch error:', fetchErr);
+      }
 
       clearTimeout(stuckTimerRef.current);
 
-      if (loError) {
-        console.error('LO fetch error:', loError);
-        if (loError.message === 'LO fetch timeout') {
-          setError('Loading profile timed out. Please click "Reset & Try Again".');
-          setLoginStuck(true);
-        } else {
-          setError('No loan officer profile found. Please contact your administrator.');
-        }
-        await supabase.auth.signOut();
-        setLoading(false);
-        return;
-      }
-      
       if (!lo) {
-        setError('No loan officer profile found. Please contact your administrator.');
+        console.error('Could not load loan officer profile');
+        setError('Could not load your profile. Please try again or use a different browser.');
+        setLoginStuck(true);
         await supabase.auth.signOut();
         setLoading(false);
         return;
@@ -176,7 +175,7 @@ const AuthComponent = ({ onAuthSuccess }) => {
         return;
       }
 
-      console.log('Login complete!');
+      console.log('Login complete! LO:', lo.full_name);
       onAuthSuccess(data.user, lo);
 
     } catch (err) {
