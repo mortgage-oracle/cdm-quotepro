@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V24
+// CDM QUOTE PRO - Main Application V26
 // ============================================================================
 
 // ============================================================================
@@ -1087,11 +1087,16 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
     }
   };
   
-  const handleMarkNotificationReviewed = async (notificationId, reviewed = true) => {
+  const handleMarkNotificationReviewed = async (notificationId) => {
     try {
-      await markNotificationReviewed(notificationId, reviewed);
+      // Mark as both reviewed and read
+      await markNotificationReviewed(notificationId, true);
+      await markNotificationRead(notificationId);
+      // Remove from bell dropdown
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
+      // Update in Activity tab
       setAllNotifications(prev => prev.map(n => 
-        n.id === notificationId ? { ...n, reviewed, reviewed_at: reviewed ? new Date().toISOString() : null } : n
+        n.id === notificationId ? { ...n, reviewed: true, is_read: true, reviewed_at: new Date().toISOString() } : n
       ));
     } catch (err) {
       console.error('Error marking notification reviewed:', err);
@@ -3165,7 +3170,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                       {/* Main Content */}
                       <div style={{ padding: '14px 14px 10px', textAlign: 'center' }}>
                         <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          {loanPurpose === 'purchase' ? 'Est. Cash to Close' : 'Est. Cash Out'}
+                          {loanPurpose === 'purchase' || calc.cashFlow < 0 ? 'Est. Cash to Close' : 'Est. Cash Out'}
                         </div>
                         <div style={{ fontSize: '26px', fontWeight: '700', 
                                       color: 'white', fontFamily: "'JetBrains Mono', monospace" }}>
@@ -4684,14 +4689,14 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   className={`btn-secondary ${notificationFilter === 'pending' ? 'active' : ''}`}
                   style={{ padding: '10px 20px', fontSize: '13px' }}
                 >
-                  Not Reviewed ({allNotifications.filter(n => !n.reviewed).length})
+                  Not Reviewed ({allNotifications.filter(n => !n.is_read).length})
                 </button>
                 <button
                   onClick={() => setNotificationFilter('reviewed')}
                   className={`btn-secondary ${notificationFilter === 'reviewed' ? 'active' : ''}`}
                   style={{ padding: '10px 20px', fontSize: '13px' }}
                 >
-                  Reviewed ({allNotifications.filter(n => n.reviewed).length})
+                  Reviewed ({allNotifications.filter(n => n.is_read).length})
                 </button>
               </div>
             </div>
@@ -4732,12 +4737,12 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                 {/* Table Body */}
                 {allNotifications
                   .filter(notif => {
-                    if (notificationFilter === 'pending') return !notif.reviewed;
-                    if (notificationFilter === 'reviewed') return notif.reviewed;
+                    if (notificationFilter === 'pending') return !notif.is_read;
+                    if (notificationFilter === 'reviewed') return notif.is_read;
                     return true;
                   })
                   .map(notif => {
-                    const isReviewed = notif.reviewed;
+                    const isReviewed = notif.is_read;
                     
                     return (
                       <div 
@@ -4804,21 +4809,33 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                           >
                             View
                           </button>
-                          <button
-                            onClick={() => handleMarkNotificationReviewed(notif.id, !notif.reviewed)}
-                            style={{
+                          {!isReviewed && (
+                            <button
+                              onClick={() => handleMarkNotificationReviewed(notif.id)}
+                              style={{
+                                padding: '6px 10px',
+                                fontSize: '11px',
+                                background: '#f0f0f0',
+                                color: '#666',
+                                border: 'none',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                fontWeight: '500'
+                              }}
+                            >
+                              Mark
+                            </button>
+                          )}
+                          {isReviewed && (
+                            <span style={{
                               padding: '6px 10px',
                               fontSize: '11px',
-                              background: isReviewed ? '#22c55e' : '#f0f0f0',
-                              color: isReviewed ? 'white' : '#666',
-                              border: 'none',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
+                              color: '#22c55e',
                               fontWeight: '500'
-                            }}
-                          >
-                            {isReviewed ? '✓' : 'Mark'}
-                          </button>
+                            }}>
+                              ✓ Done
+                            </span>
+                          )}
                         </div>
                       </div>
                     );
@@ -4826,8 +4843,8 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                 
                 {/* Empty State for Filtered Results */}
                 {allNotifications.filter(notif => {
-                  if (notificationFilter === 'pending') return !notif.reviewed;
-                  if (notificationFilter === 'reviewed') return notif.reviewed;
+                  if (notificationFilter === 'pending') return !notif.is_read;
+                  if (notificationFilter === 'reviewed') return notif.is_read;
                   return true;
                 }).length === 0 && (
                   <div style={{ padding: '40px', textAlign: 'center', color: '#888' }}>
@@ -4853,13 +4870,13 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                 </div>
                 <div style={{ background: '#fef3c7', padding: '16px', borderRadius: '10px', textAlign: 'center' }}>
                   <div style={{ fontSize: '24px', fontWeight: '700', color: '#92400e' }}>
-                    {allNotifications.filter(n => !n.reviewed).length}
+                    {allNotifications.filter(n => !n.is_read).length}
                   </div>
                   <div style={{ fontSize: '12px', color: '#888' }}>Not Reviewed</div>
                 </div>
                 <div style={{ background: '#d1fae5', padding: '16px', borderRadius: '10px', textAlign: 'center' }}>
                   <div style={{ fontSize: '24px', fontWeight: '700', color: '#065f46' }}>
-                    {allNotifications.filter(n => n.reviewed).length}
+                    {allNotifications.filter(n => n.is_read).length}
                   </div>
                   <div style={{ fontSize: '12px', color: '#888' }}>Reviewed</div>
                 </div>
@@ -5869,7 +5886,9 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
             
             {/* Cash to Close Section */}
             <div style={{ padding: '24px', borderTop: '1px solid #e0e0e0', background: '#f8f8f8' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '16px' }}>Calculating Cash to Close</h3>
+              <h3 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '16px' }}>
+                {loanPurpose === 'purchase' || cashToClose < 0 ? 'Calculating Cash to Close' : 'Calculating Cash Out'}
+              </h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: '8px', fontSize: '14px' }}>
                 <span>Total Closing Costs (J)</span>
                 <span className="mono" style={{ textAlign: 'right' }}>{formatCurrency(totalJ)}</span>
@@ -5885,7 +5904,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                 </>}
                 
                 <div style={{ gridColumn: '1 / -1', borderTop: '2px solid #333', marginTop: '8px', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontWeight: '700', fontSize: '16px' }}>
-                  <span>{loanPurpose === 'purchase' ? 'Estimated Cash to Close' : 'Estimated Cash Out'}</span>
+                  <span>{loanPurpose === 'purchase' || cashToClose < 0 ? 'Estimated Cash to Close' : 'Estimated Cash Out'}</span>
                   <span className="mono">{formatCurrency(Math.abs(cashToClose))}</span>
                 </div>
               </div>
