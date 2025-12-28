@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnreadNotifications, getAllNotifications, subscribeToNotifications, markNotificationRead, markNotificationReviewed, updateLoanOfficerProfile, updateLoanOfficerByEmail } from '../supabaseClient';
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V27
+// CDM QUOTE PRO - Main Application V28
 // ============================================================================
 
 // ============================================================================
@@ -762,6 +762,8 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareQuoteData, setShareQuoteData] = useState(null);
   const [shareUrl, setShareUrl] = useState('');
+  const [sharingQuote, setSharingQuote] = useState(false); // Prevent double-clicks
+  const sharingRef = useRef(false); // Ref-based lock for immediate protection
   
   // Notifications
   const [notifications, setNotifications] = useState([]);
@@ -1127,6 +1129,12 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
   const handleShareQuote = async (quoteData) => {
     console.log('handleShareQuote called with:', quoteData);
     
+    // Prevent double-clicks with immediate ref check
+    if (sharingRef.current || sharingQuote) {
+      console.log('Already sharing, ignoring duplicate click');
+      return;
+    }
+    
     // Validate client name is entered
     if (!clientInfo.name || clientInfo.name.trim() === '') {
       alert('Please enter a client name before sharing the quote.');
@@ -1139,6 +1147,10 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
       alert('Session expired. Please log in again.');
       return;
     }
+    
+    // Lock immediately with ref (synchronous, no state update delay)
+    sharingRef.current = true;
+    setSharingQuote(true); // Also update state for UI feedback
     
     try {
       console.log('Saving quote for LO:', loanOfficer.id);
@@ -1169,6 +1181,9 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
     } catch (err) {
       console.error('Error sharing quote:', err);
       alert('Failed to share quote: ' + (err.message || 'Unknown error'));
+    } finally {
+      sharingRef.current = false; // Unlock ref
+      setSharingQuote(false); // Unlock state
     }
   };
 
@@ -2815,10 +2830,11 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   <button className="btn-secondary" onClick={openSaveModal}>Save Quote</button>
                   <button 
                     className="btn-primary" 
-                    disabled={!loanOfficer?.id}
+                    disabled={!loanOfficer?.id || sharingQuote}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
+                      if (sharingRef.current || sharingQuote) return; // Immediate protection
                       console.log('Share Quote button clicked, loanOfficer:', loanOfficer?.id);
                       if (!loanOfficer?.id) {
                         alert('Session expired. Please refresh the page or log in again.');
@@ -2958,13 +2974,15 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                       });
                     }}
                     style={{
-                      background: 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
+                      background: sharingQuote ? '#999' : 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '8px'
+                      gap: '8px',
+                      cursor: sharingQuote ? 'not-allowed' : 'pointer',
+                      opacity: sharingQuote ? 0.7 : 1
                     }}
                   >
-                    <span>📤</span> Share Quote
+                    <span>{sharingQuote ? '⏳' : '📤'}</span> {sharingQuote ? 'Sharing...' : 'Share Quote'}
                   </button>
                   <button className="btn-secondary" onClick={() => setActiveTab('rates')}>Edit Rates</button>
                 </div>
@@ -3801,10 +3819,11 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   <button className="btn-secondary" onClick={openSaveModal}>Save Quote</button>
                   <button 
                     className="btn-primary" 
-                    disabled={!loanOfficer?.id}
+                    disabled={!loanOfficer?.id || sharingQuote}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
+                      if (sharingRef.current || sharingQuote) return; // Immediate protection
                       console.log('Home Equity Share Quote button clicked, loanOfficer:', loanOfficer?.id);
                       if (!loanOfficer?.id) {
                         alert('Session expired. Please refresh the page or log in again.');
@@ -3822,13 +3841,15 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                       });
                     }}
                     style={{
-                      background: 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
+                      background: sharingQuote ? '#999' : 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '8px'
+                      gap: '8px',
+                      cursor: sharingQuote ? 'not-allowed' : 'pointer',
+                      opacity: sharingQuote ? 0.7 : 1
                     }}
                   >
-                    <span>📤</span> Share Quote
+                    <span>{sharingQuote ? '⏳' : '📤'}</span> {sharingQuote ? 'Sharing...' : 'Share Quote'}
                   </button>
                   <button className="btn-secondary" onClick={() => setHomeEquityView('editRates')}>Edit Rates</button>
                 </div>
