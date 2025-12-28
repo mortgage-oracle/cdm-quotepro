@@ -1,5 +1,5 @@
 // ============================================================================
-// CONSUMER QUOTE VIEW PAGE V13
+// CONSUMER QUOTE VIEW PAGE V14
 // What borrowers see when they click their unique quote link
 // ============================================================================
 
@@ -267,25 +267,8 @@ const ConsumerQuoteView = () => {
        quoteData.loanProgram === 'conventional' ? 'Conventional' :
        quoteData.loanProgram || 'Conventional');
   
-  // ARM configuration
-  const isARM = quoteData.rateType === 'arm';
-  const armConfig = quoteData.armConfig || {};
-  
-  // ARM product labels
-  const armProductLabels = {
-    '5_6': '5/6 ARM',
-    '7_6': '7/6 ARM',
-    '10_6': '10/6 ARM'
-  };
-  const armProductLabel = armProductLabels[armConfig.product] || armConfig.product || '5/6 ARM';
-  
-  // ARM fixed years based on product
-  const armFixedYears = {
-    '5_6': 5,
-    '7_6': 7,
-    '10_6': 10
-  };
-  const fixedYears = armFixedYears[armConfig.product] || 5;
+  // Check if this is an ARM quote - look at first option's armDetails
+  const isARM = quoteData.rateType === 'arm' || options[0]?.armDetails;
   
   // Helper to get monthly payment from option
   const getMonthlyPayment = (option) => {
@@ -464,75 +447,89 @@ const ConsumerQuoteView = () => {
           </div>
           
           {/* ARM Details Section */}
-          {isARM && !isHomeEquity && (
-            <div style={{
-              background: 'linear-gradient(135deg, #7B2CBF10, #9D4EDD10)',
-              border: '1px solid #7B2CBF30',
-              borderRadius: '12px',
-              padding: '16px',
-              marginTop: '12px'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <div style={{ 
-                  background: 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
-                  color: 'white',
-                  padding: '4px 10px',
-                  borderRadius: '6px',
-                  fontSize: '12px',
-                  fontWeight: '600'
-                }}>
-                  {armProductLabel}
-                </div>
-                <div style={{ fontSize: '11px', color: '#666' }}>
-                  SOFR: {armConfig.indexRate || 0}% + {armConfig.margin || 0}% margin
-                </div>
-              </div>
-              
-              {/* Rate Adjustment Table */}
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(5, 1fr)', 
-                gap: '6px',
-                fontSize: '10px',
-                textAlign: 'center'
+          {isARM && !isHomeEquity && options[0]?.armDetails && (() => {
+            const arm = options[0].armDetails;
+            const armProductLabels = {
+              '6/6': '6/6 ARM',
+              '1/6': '1/6 ARM', 
+              '5/6': '5/6 ARM',
+              '7/6': '7/6 ARM',
+              '5/1': '5/1 ARM',
+              '7/1': '7/1 ARM',
+              '10/1': '10/1 ARM'
+            };
+            const armProductLabel = armProductLabels[arm.product] || arm.product || 'ARM';
+            
+            return (
+              <div style={{
+                background: 'linear-gradient(135deg, #7B2CBF10, #9D4EDD10)',
+                border: '1px solid #7B2CBF30',
+                borderRadius: '12px',
+                padding: '16px',
+                marginTop: '12px'
               }}>
-                <div>
-                  <div style={{ color: '#888', marginBottom: '4px' }}>Fixed</div>
-                  <div style={{ fontWeight: '600', background: 'white', padding: '6px 4px', borderRadius: '4px' }}>
-                    {fixedYears}yr
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div style={{ 
+                    background: 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
+                    color: 'white',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: '600'
+                  }}>
+                    {armProductLabel}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#666' }}>
+                    {arm.index || 'SOFR'}: {arm.indexRate}% + {arm.margin}% margin
                   </div>
                 </div>
-                <div>
-                  <div style={{ color: '#888', marginBottom: '4px' }}>Fully Indexed</div>
-                  <div style={{ fontWeight: '600', background: 'white', padding: '6px 4px', borderRadius: '4px' }}>
-                    {((armConfig.indexRate || 0) + (armConfig.margin || 0)).toFixed(2)}%
+                
+                {/* Rate Adjustment Table */}
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(5, 1fr)', 
+                  gap: '6px',
+                  fontSize: '10px',
+                  textAlign: 'center'
+                }}>
+                  <div>
+                    <div style={{ color: '#888', marginBottom: '4px' }}>Fixed</div>
+                    <div style={{ fontWeight: '600', background: 'white', padding: '6px 4px', borderRadius: '4px' }}>
+                      {arm.fixedLabel || `${arm.fixedPeriod} yr${arm.fixedPeriod !== 1 ? 's' : ''}`}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#888', marginBottom: '4px' }}>Fully Indexed</div>
+                    <div style={{ fontWeight: '600', background: 'white', padding: '6px 4px', borderRadius: '4px' }}>
+                      {arm.fullyIndexedRate?.toFixed(2) || ((arm.indexRate || 0) + (arm.margin || 0)).toFixed(2)}%
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#888', marginBottom: '4px' }}>Caps</div>
+                    <div style={{ fontWeight: '600', background: 'white', padding: '6px 4px', borderRadius: '4px' }}>
+                      {arm.initialCap}/{arm.periodicCap}/{arm.lifetimeCap}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#888', marginBottom: '4px' }}>Max Rate</div>
+                    <div style={{ fontWeight: '600', background: 'white', padding: '6px 4px', borderRadius: '4px' }}>
+                      {arm.maxLifetimeRate?.toFixed(2) || ((options[0]?.rate || 0) + (arm.lifetimeCap || 5)).toFixed(2)}%
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#888', marginBottom: '4px' }}>Index</div>
+                    <div style={{ fontWeight: '600', background: 'white', padding: '6px 4px', borderRadius: '4px' }}>
+                      {arm.index || 'SOFR'}
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <div style={{ color: '#888', marginBottom: '4px' }}>Caps</div>
-                  <div style={{ fontWeight: '600', background: 'white', padding: '6px 4px', borderRadius: '4px' }}>
-                    {armConfig.initialCap || 2}/{armConfig.periodicCap || 2}/{armConfig.lifetimeCap || 5}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ color: '#888', marginBottom: '4px' }}>Max Rate</div>
-                  <div style={{ fontWeight: '600', background: 'white', padding: '6px 4px', borderRadius: '4px' }}>
-                    {((options[0]?.rate || 0) + (armConfig.lifetimeCap || 5)).toFixed(2)}%
-                  </div>
-                </div>
-                <div>
-                  <div style={{ color: '#888', marginBottom: '4px' }}>Index</div>
-                  <div style={{ fontWeight: '600', background: 'white', padding: '6px 4px', borderRadius: '4px' }}>
-                    SOFR
-                  </div>
+                
+                <div style={{ marginTop: '10px', fontSize: '10px', color: '#666', lineHeight: '1.4' }}>
+                  <strong>Note:</strong> Rate is fixed for {arm.fixedLabel || `${arm.fixedPeriod} year${arm.fixedPeriod !== 1 ? 's' : ''}`}, then adjusts every {arm.adjustFrequency === 0.5 ? '6 months' : `${arm.adjustFrequency} year${arm.adjustFrequency !== 1 ? 's' : ''}`} based on {arm.index || 'SOFR'} index. Fully indexed rate is currently {arm.fullyIndexedRate?.toFixed(2) || ((arm.indexRate || 0) + (arm.margin || 0)).toFixed(2)}%.
                 </div>
               </div>
-              
-              <div style={{ marginTop: '10px', fontSize: '10px', color: '#666', lineHeight: '1.4' }}>
-                <strong>Note:</strong> Rate is fixed for {fixedYears} year{fixedYears > 1 ? 's' : ''}, then adjusts every 6 months based on SOFR index. Fully indexed rate is currently {((armConfig.indexRate || 0) + (armConfig.margin || 0)).toFixed(2)}%.
-              </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
         
         {/* Options */}
