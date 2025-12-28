@@ -1,10 +1,10 @@
 // ============================================================================
-// CDM QUOTE PRO - MAIN APP V6
+// CDM QUOTE PRO - MAIN APP V7
 // Routes between LO tool and consumer quote view
 // ============================================================================
 
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import AuthComponent from './components/AuthComponent';
 import QuotePro from './pages/QuotePro';
@@ -15,10 +15,21 @@ function App() {
   const [user, setUser] = useState(null);
   const [loanOfficer, setLoanOfficer] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
 
   // Check if we're on a consumer quote page or reset password (public, no auth needed)
   const isPublicPage = window.location.pathname.startsWith('/q/') || 
                        window.location.pathname === '/reset-password';
+
+  // Check for recovery token in URL hash on initial load
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && hash.includes('type=recovery')) {
+      console.log('Recovery token detected in URL');
+      setIsRecoveryMode(true);
+      setLoading(false);
+    }
+  }, []);
 
   // Clear all Supabase auth storage
   const clearAllAuthStorage = () => {
@@ -46,9 +57,14 @@ function App() {
   };
 
   useEffect(() => {
+    // Skip auth checking if in recovery mode
+    if (isRecoveryMode) {
+      return;
+    }
+
     // Skip auth checking entirely on consumer quote pages
     if (isPublicPage) {
-      console.log('Consumer quote page - skipping auth check');
+      console.log('Public page - skipping auth check');
       setLoading(false);
       return;
     }
@@ -79,10 +95,19 @@ function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state change:', event);
+      
+      // Handle password recovery event
+      if (event === 'PASSWORD_RECOVERY') {
+        console.log('PASSWORD_RECOVERY event detected');
+        setIsRecoveryMode(true);
+        setLoading(false);
+        return;
+      }
+      
       if (event === 'SIGNED_OUT') {
         setUser(null);
         setLoanOfficer(null);
-      } else if (event === 'SIGNED_IN' && session) {
+      } else if (event === 'SIGNED_IN' && session && !isRecoveryMode) {
         await loadLoanOfficer(session.user.email);
       }
     });
@@ -92,7 +117,7 @@ function App() {
       clearTimeout(failsafeTimeout);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [isRecoveryMode]);
 
   const checkSession = async () => {
     try {
@@ -176,6 +201,11 @@ function App() {
     setUser(null);
     setLoanOfficer(null);
   };
+
+  // If recovery mode, show reset password page directly
+  if (isRecoveryMode) {
+    return <ResetPassword />;
+  }
 
   // Loading state - but skip for consumer quote pages
   if (loading && !isPublicPage) {
