@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V26
+// CDM QUOTE PRO - Main Application V27
 // ============================================================================
 
 // ============================================================================
@@ -1125,13 +1125,23 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
   
   // Share quote handler
   const handleShareQuote = async (quoteData) => {
+    console.log('handleShareQuote called with:', quoteData);
+    
     // Validate client name is entered
     if (!clientInfo.name || clientInfo.name.trim() === '') {
       alert('Please enter a client name before sharing the quote.');
       return;
     }
     
+    // Check loan officer is available
+    if (!loanOfficer?.id) {
+      console.error('No loan officer ID available');
+      alert('Session expired. Please log in again.');
+      return;
+    }
+    
     try {
+      console.log('Saving quote for LO:', loanOfficer.id);
       // Save to database first
       const savedQuote = await saveQuote(loanOfficer.id, {
         ...quoteData,
@@ -1139,8 +1149,17 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
         quoteType: quoteData.quoteType || 'mortgage'
       });
       
+      console.log('Quote saved:', savedQuote);
+      
+      if (!savedQuote?.share_id) {
+        console.error('No share_id returned from saveQuote');
+        alert('Failed to generate share link. Please try again.');
+        return;
+      }
+      
       // Generate shareable URL
       const url = getShareableQuoteUrl(savedQuote.share_id);
+      console.log('Share URL generated:', url);
       setShareUrl(url);
       setShareQuoteData(savedQuote);
       setShowShareModal(true);
@@ -1149,7 +1168,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
       loadQuotesFromDB();
     } catch (err) {
       console.error('Error sharing quote:', err);
-      alert('Failed to share quote. Please try again.');
+      alert('Failed to share quote: ' + (err.message || 'Unknown error'));
     }
   };
 
@@ -2797,6 +2816,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   <button 
                     className="btn-primary" 
                     onClick={() => {
+                      console.log('Share Quote button clicked');
                       // Calculate detailed fees for each option
                       const detailedCalcs = calculations.slice(0, 3).map((calc, i) => {
                         const lendersTitle = (titleInsuranceRates[clientInfo.state] || 2.5) * (calc.totalLoanAmount / 1000);
@@ -3775,6 +3795,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   <button 
                     className="btn-primary" 
                     onClick={() => {
+                      console.log('Home Equity Share Quote button clicked');
                       handleShareQuote({
                         label: quoteLabel || `Home Equity Quote for ${clientInfo.name || 'Client'}`,
                         quoteType: 'home_equity',
