@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V22
+// CDM QUOTE PRO - Main Application V23
 // ============================================================================
 
 // ============================================================================
@@ -766,7 +766,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
   // Notifications
   const [notifications, setNotifications] = useState([]);
   const [allNotifications, setAllNotifications] = useState([]);
-  const [notificationFilter, setNotificationFilter] = useState('all'); // 'all', 'unread', 'applied', 'reviewed'
+  const [notificationFilter, setNotificationFilter] = useState('pending'); // 'pending', 'reviewed'
   const [loadingAllNotifications, setLoadingAllNotifications] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   
@@ -4594,20 +4594,24 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
               <div>
                 <h2 style={{ fontSize: '24px', fontWeight: '700', marginBottom: '4px' }}>🔔 Client Activity</h2>
                 <p style={{ color: '#666', fontSize: '13px' }}>
-                  Track when clients view your quotes and click Apply
+                  Track when clients view your shared quotes
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
-                {['all', 'unread', 'applied', 'reviewed'].map(filter => (
-                  <button
-                    key={filter}
-                    onClick={() => setNotificationFilter(filter)}
-                    className={`btn-secondary ${notificationFilter === filter ? 'active' : ''}`}
-                    style={{ padding: '8px 16px', fontSize: '12px', textTransform: 'capitalize' }}
-                  >
-                    {filter === 'applied' ? '🎯 Applied' : filter}
-                  </button>
-                ))}
+                <button
+                  onClick={() => setNotificationFilter('pending')}
+                  className={`btn-secondary ${notificationFilter === 'pending' ? 'active' : ''}`}
+                  style={{ padding: '10px 20px', fontSize: '13px' }}
+                >
+                  Not Reviewed ({allNotifications.filter(n => !n.reviewed).length})
+                </button>
+                <button
+                  onClick={() => setNotificationFilter('reviewed')}
+                  className={`btn-secondary ${notificationFilter === 'reviewed' ? 'active' : ''}`}
+                  style={{ padding: '10px 20px', fontSize: '13px' }}
+                >
+                  Reviewed ({allNotifications.filter(n => n.reviewed).length})
+                </button>
               </div>
             </div>
             
@@ -4628,7 +4632,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                 {/* Table Header */}
                 <div style={{ 
                   display: 'grid', 
-                  gridTemplateColumns: '1fr 1.5fr 120px 100px 100px 140px',
+                  gridTemplateColumns: '1.2fr 1.5fr 140px 100px',
                   background: '#f8f8f8',
                   padding: '12px 16px',
                   fontWeight: '600',
@@ -4640,35 +4644,30 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                 }}>
                   <div>Client</div>
                   <div>Quote</div>
-                  <div>Action</div>
-                  <div>Date</div>
-                  <div>Status</div>
+                  <div>Viewed</div>
                   <div>Actions</div>
                 </div>
                 
                 {/* Table Body */}
                 {allNotifications
                   .filter(notif => {
-                    if (notificationFilter === 'all') return true;
-                    if (notificationFilter === 'unread') return !notif.is_read;
-                    if (notificationFilter === 'applied') return notif.notification_type === 'apply_click';
+                    if (notificationFilter === 'pending') return !notif.reviewed;
                     if (notificationFilter === 'reviewed') return notif.reviewed;
                     return true;
                   })
                   .map(notif => {
-                    const isApplied = notif.notification_type === 'apply_click';
-                    const isNew = !notif.is_read;
+                    const isReviewed = notif.reviewed;
                     
                     return (
                       <div 
                         key={notif.id}
                         style={{ 
                           display: 'grid', 
-                          gridTemplateColumns: '1fr 1.5fr 120px 100px 100px 140px',
+                          gridTemplateColumns: '1.2fr 1.5fr 140px 100px',
                           padding: '14px 16px',
                           borderBottom: '1px solid #f0f0f0',
                           alignItems: 'center',
-                          background: isNew ? '#faf5ff' : isApplied ? '#f0fdf4' : 'white',
+                          background: isReviewed ? '#f9f9f9' : 'white',
                           transition: 'background 0.2s'
                         }}
                       >
@@ -4676,9 +4675,6 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                         <div>
                           <div style={{ fontWeight: '600', fontSize: '14px' }}>
                             {notif.quotes?.client_name || 'Unknown'}
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#888' }}>
-                            {notif.notification_type === 'apply_click' ? 'Applied!' : 'Viewed quote'}
                           </div>
                         </div>
                         
@@ -4692,39 +4688,6 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                           </div>
                         </div>
                         
-                        {/* Action Type */}
-                        <div>
-                          {isApplied ? (
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              padding: '4px 10px',
-                              background: 'linear-gradient(135deg, #22c55e, #16a34a)',
-                              color: 'white',
-                              borderRadius: '20px',
-                              fontSize: '11px',
-                              fontWeight: '600'
-                            }}>
-                              🎯 Applied!
-                            </span>
-                          ) : (
-                            <span style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              padding: '4px 10px',
-                              background: '#e0e7ff',
-                              color: '#4338ca',
-                              borderRadius: '20px',
-                              fontSize: '11px',
-                              fontWeight: '600'
-                            }}>
-                              👁 Viewed
-                            </span>
-                          )}
-                        </div>
-                        
                         {/* Date */}
                         <div style={{ fontSize: '12px', color: '#666' }}>
                           {new Date(notif.created_at).toLocaleDateString('en-US', { 
@@ -4735,42 +4698,6 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                           })}
                         </div>
                         
-                        {/* Status */}
-                        <div>
-                          {notif.reviewed ? (
-                            <span style={{
-                              padding: '4px 8px',
-                              background: '#f0f0f0',
-                              color: '#666',
-                              borderRadius: '4px',
-                              fontSize: '11px'
-                            }}>
-                              ✓ Reviewed
-                            </span>
-                          ) : isNew ? (
-                            <span style={{
-                              padding: '4px 8px',
-                              background: '#7B2CBF',
-                              color: 'white',
-                              borderRadius: '4px',
-                              fontSize: '11px',
-                              fontWeight: '600'
-                            }}>
-                              NEW
-                            </span>
-                          ) : (
-                            <span style={{
-                              padding: '4px 8px',
-                              background: '#fef3c7',
-                              color: '#92400e',
-                              borderRadius: '4px',
-                              fontSize: '11px'
-                            }}>
-                              Pending
-                            </span>
-                          )}
-                        </div>
-                        
                         {/* Actions */}
                         <div style={{ display: 'flex', gap: '6px' }}>
                           <button
@@ -4778,6 +4705,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                               const quote = dbQuotes.find(q => q.id === notif.quotes?.id);
                               if (quote) {
                                 loadSavedQuote(quote);
+                                setActiveTab('quote');
                               } else {
                                 alert('Quote not found in saved quotes');
                               }
@@ -4800,15 +4728,15 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                             style={{
                               padding: '6px 10px',
                               fontSize: '11px',
-                              background: notif.reviewed ? '#f0f0f0' : '#e0e7ff',
-                              color: notif.reviewed ? '#666' : '#4338ca',
+                              background: isReviewed ? '#22c55e' : '#f0f0f0',
+                              color: isReviewed ? 'white' : '#666',
                               border: 'none',
                               borderRadius: '6px',
                               cursor: 'pointer',
                               fontWeight: '500'
                             }}
                           >
-                            {notif.reviewed ? 'Unmark' : '✓ Mark'}
+                            {isReviewed ? '✓' : 'Mark'}
                           </button>
                         </div>
                       </div>
@@ -4817,14 +4745,12 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                 
                 {/* Empty State for Filtered Results */}
                 {allNotifications.filter(notif => {
-                  if (notificationFilter === 'all') return true;
-                  if (notificationFilter === 'unread') return !notif.is_read;
-                  if (notificationFilter === 'applied') return notif.notification_type === 'apply_click';
+                  if (notificationFilter === 'pending') return !notif.reviewed;
                   if (notificationFilter === 'reviewed') return notif.reviewed;
                   return true;
                 }).length === 0 && (
                   <div style={{ padding: '40px', textAlign: 'center', color: '#888' }}>
-                    No {notificationFilter} notifications
+                    No {notificationFilter === 'reviewed' ? 'reviewed' : 'pending'} items
                   </div>
                 )}
               </div>
@@ -4834,7 +4760,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
             {allNotifications.length > 0 && (
               <div style={{ 
                 display: 'grid', 
-                gridTemplateColumns: 'repeat(4, 1fr)', 
+                gridTemplateColumns: 'repeat(3, 1fr)', 
                 gap: '16px', 
                 marginTop: '24px' 
               }}>
@@ -4844,20 +4770,14 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   </div>
                   <div style={{ fontSize: '12px', color: '#888' }}>Total Views</div>
                 </div>
-                <div style={{ background: '#f0fdf4', padding: '16px', borderRadius: '10px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#22c55e' }}>
-                    {allNotifications.filter(n => n.notification_type === 'apply_click').length}
+                <div style={{ background: '#fef3c7', padding: '16px', borderRadius: '10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#92400e' }}>
+                    {allNotifications.filter(n => !n.reviewed).length}
                   </div>
-                  <div style={{ fontSize: '12px', color: '#888' }}>Applied</div>
+                  <div style={{ fontSize: '12px', color: '#888' }}>Not Reviewed</div>
                 </div>
-                <div style={{ background: '#faf5ff', padding: '16px', borderRadius: '10px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#7B2CBF' }}>
-                    {allNotifications.filter(n => !n.is_read).length}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#888' }}>New</div>
-                </div>
-                <div style={{ background: '#f8f8f8', padding: '16px', borderRadius: '10px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#666' }}>
+                <div style={{ background: '#d1fae5', padding: '16px', borderRadius: '10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '24px', fontWeight: '700', color: '#065f46' }}>
                     {allNotifications.filter(n => n.reviewed).length}
                   </div>
                   <div style={{ fontSize: '12px', color: '#888' }}>Reviewed</div>
