@@ -1,5 +1,5 @@
 // ============================================================================
-// CDM QUOTE PRO - MAIN APP V4
+// CDM QUOTE PRO - MAIN APP V5
 // Routes between LO tool and consumer quote view
 // ============================================================================
 
@@ -53,14 +53,14 @@ function App() {
 
     let isMounted = true;
     
-    // FAILSAFE: Force loading to false after 3 seconds no matter what
+    // FAILSAFE: Force loading to false after 5 seconds no matter what
+    // But DON'T clear storage - just show login screen and let user try again
     const failsafeTimeout = setTimeout(() => {
-      if (isMounted) {
-        console.log('Failsafe timeout - clearing storage and forcing loading to false');
-        clearAllAuthStorage();
+      if (isMounted && loading) {
+        console.log('Failsafe timeout - forcing loading to false (session may still be valid)');
         setLoading(false);
       }
-    }, 3000);
+    }, 5000);
 
     const init = async () => {
       try {
@@ -96,13 +96,15 @@ function App() {
     try {
       console.log('Checking session...');
       
-      // Wrap getSession in a timeout promise
+      // Wrap getSession in a timeout promise - increased to 8 seconds
       const getSessionWithTimeout = () => {
         return new Promise(async (resolve) => {
           const timeout = setTimeout(() => {
-            console.log('getSession timed out');
+            console.log('getSession timed out - but NOT clearing storage');
+            // Don't clear storage on timeout - just resolve with no session
+            // The session might still be valid, just slow to load
             resolve({ data: { session: null }, error: new Error('Timeout') });
-          }, 2000);
+          }, 8000);
           
           try {
             const result = await supabase.auth.getSession();
@@ -117,9 +119,16 @@ function App() {
       
       const { data: { session }, error } = await getSessionWithTimeout();
       
-      if (error) {
-        console.log('Session check error or timeout, clearing storage:', error.message);
+      if (error && error.message !== 'Timeout') {
+        // Only clear storage for real errors, not timeouts
+        console.log('Session check error, clearing storage:', error.message);
         clearAllAuthStorage();
+        return;
+      }
+      
+      if (error?.message === 'Timeout') {
+        // On timeout, just log but don't clear - let user try logging in again
+        console.log('Session check timed out - showing login screen');
         return;
       }
       
@@ -131,7 +140,10 @@ function App() {
       }
     } catch (error) {
       console.error('Session check error:', error);
-      clearAllAuthStorage();
+      // Only clear on actual auth errors, not network issues
+      if (error.message?.includes('auth') || error.message?.includes('token')) {
+        clearAllAuthStorage();
+      }
     }
   };
 
