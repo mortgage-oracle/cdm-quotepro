@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnreadNotifications, getAllNotifications, subscribeToNotifications, markNotificationRead, markNotificationReviewed, updateLoanOfficerProfile, updateLoanOfficerByEmail, saveFeeTemplates } from '../supabaseClient';
+import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnreadNotifications, getAllNotifications, subscribeToNotifications, markNotificationRead, markNotificationReviewed, updateLoanOfficerProfile, updateLoanOfficerByEmail, saveFeeTemplates, saveStateLookupTables } from '../supabaseClient';
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V26
+// CDM QUOTE PRO - Main Application V27
 // ============================================================================
 
 // ============================================================================
@@ -928,6 +928,62 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
   const [recordingFees, setRecordingFees] = useState({ ...defaultRecordingFees });
   const [pmiRates, setPmiRates] = useState({ ...defaultPmiRates });
   const [baseTitleFees, setBaseTitleFees] = useState({ ...defaultBaseTitleFees });
+  
+  // State lookup tables persistence
+  const [savingStateTables, setSavingStateTables] = useState(false);
+  const [stateTablesLoaded, setStateTablesLoaded] = useState(false);
+  
+  // Load state lookup tables from loanOfficer on mount
+  useEffect(() => {
+    if (loanOfficer?.state_lookup_tables && !stateTablesLoaded) {
+      console.log('Loading state lookup tables from database:', loanOfficer.state_lookup_tables);
+      const tables = loanOfficer.state_lookup_tables;
+      
+      if (tables.propertyTaxRates) setPropertyTaxRates(prev => ({ ...prev, ...tables.propertyTaxRates }));
+      if (tables.titleInsuranceRates) setTitleInsuranceRates(prev => ({ ...prev, ...tables.titleInsuranceRates }));
+      if (tables.transferTaxRates) setTransferTaxRates(prev => ({ ...prev, ...tables.transferTaxRates }));
+      if (tables.recordingFees) setRecordingFees(prev => ({ ...prev, ...tables.recordingFees }));
+      if (tables.pmiRates) setPmiRates(prev => ({ ...prev, ...tables.pmiRates }));
+      if (tables.baseTitleFees) setBaseTitleFees(prev => ({ ...prev, ...tables.baseTitleFees }));
+      
+      setStateTablesLoaded(true);
+    }
+  }, [loanOfficer?.state_lookup_tables, stateTablesLoaded]);
+  
+  // Save state lookup tables to database
+  const handleSaveStateLookupTables = async () => {
+    if (!loanOfficer?.id) return;
+    
+    setSavingStateTables(true);
+    try {
+      await saveStateLookupTables(loanOfficer.id, {
+        propertyTaxRates,
+        titleInsuranceRates,
+        transferTaxRates,
+        recordingFees,
+        pmiRates,
+        baseTitleFees
+      });
+      alert('State lookup tables saved successfully!');
+    } catch (err) {
+      console.error('Failed to save state lookup tables:', err);
+      alert('Failed to save state lookup tables. Please try again.');
+    } finally {
+      setSavingStateTables(false);
+    }
+  };
+  
+  // Reset state lookup tables to defaults
+  const handleResetStateLookupTables = () => {
+    if (window.confirm('Reset all state lookup tables to default values? This cannot be undone.')) {
+      setPropertyTaxRates({ ...defaultPropertyTaxRates });
+      setTitleInsuranceRates({ ...defaultTitleInsuranceRates });
+      setTransferTaxRates({ ...defaultTransferTaxRates });
+      setRecordingFees({ ...defaultRecordingFees });
+      setPmiRates({ ...defaultPmiRates });
+      setBaseTitleFees({ ...defaultBaseTitleFees });
+    }
+  };
   
   // Deal-level Prepaid & Escrow Settings (initialized from Admin defaults, can override per-deal)
   const [prepaidSettings, setPrepaidSettings] = useState({
@@ -5510,10 +5566,50 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
               )}
               
               <div className="card">
-                <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '20px' }}>State Lookup Tables</h2>
-                <p style={{ fontSize: '13px', color: '#666', marginBottom: '20px' }}>
-                  These tables automatically populate fees based on the selected state. Click to view/edit.
-                </p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <div>
+                    <h2 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '4px' }}>State Lookup Tables</h2>
+                    <p style={{ fontSize: '13px', color: '#666', margin: 0 }}>
+                      These tables automatically populate fees based on the selected state. Click to view/edit.
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={handleResetStateLookupTables}
+                      style={{
+                        padding: '10px 16px',
+                        background: '#f0f0f0',
+                        color: '#666',
+                        border: '1px solid #ddd',
+                        borderRadius: '8px',
+                        fontWeight: '500',
+                        cursor: 'pointer',
+                        fontSize: '13px'
+                      }}
+                    >
+                      ↩️ Reset to Defaults
+                    </button>
+                    <button
+                      onClick={handleSaveStateLookupTables}
+                      disabled={savingStateTables}
+                      style={{
+                        padding: '10px 20px',
+                        background: savingStateTables ? '#ccc' : 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontWeight: '600',
+                        cursor: savingStateTables ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {savingStateTables ? '⏳ Saving...' : '💾 Save Tables'}
+                    </button>
+                  </div>
+                </div>
                 
                 {/* Table Buttons */}
                 <div style={{ display: 'grid', gap: '12px' }}>
