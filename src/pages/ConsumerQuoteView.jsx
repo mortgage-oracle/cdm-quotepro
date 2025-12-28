@@ -1,5 +1,5 @@
 // ============================================================================
-// CONSUMER QUOTE VIEW PAGE V14
+// CONSUMER QUOTE VIEW PAGE V15
 // What borrowers see when they click their unique quote link
 // ============================================================================
 
@@ -295,23 +295,27 @@ const ConsumerQuoteView = () => {
       };
     }
     
-    // Check if this is a cash-out refinance
+    // Check if this is a purchase or refinance
     const isPurchase = quoteData.loanPurpose === 'purchase';
-    const isCashOut = quoteData.loanPurpose === 'refinance' || quoteData.loanPurpose === 'cash_out';
     
-    if (isCashOut) {
-      // For cash-out refinance, cash flows TO borrower
-      const cashOut = option.cashFlow || option.feeBreakdown?.cashToClose || 0;
+    // Get the cash flow value
+    const cashFlowValue = option.cashFlow ?? option.feeBreakdown?.cashToClose ?? 0;
+    
+    // Determine label based on cash flow direction, not just loan purpose
+    // Positive = borrower receives money (Cash Out)
+    // Negative or zero = borrower brings money (Cash to Close)
+    if (isPurchase || cashFlowValue <= 0) {
+      // Purchase always brings money, or refi where borrower brings money
       return {
-        label: 'Est. Cash Out',
-        value: Math.abs(cashOut)
+        label: 'Est. Cash to Close',
+        value: Math.abs(cashFlowValue)
       };
     }
     
-    // For purchase, cash flows FROM borrower
+    // True cash-out refinance where borrower receives money
     return {
-      label: 'Est. Cash to Close',
-      value: option.feeBreakdown?.cashToClose || option.totalSettlement || option.totalClosingCosts || 0
+      label: 'Est. Cash Out',
+      value: cashFlowValue
     };
   };
 
@@ -1009,7 +1013,9 @@ const ConsumerQuoteView = () => {
                     {/* Cash to Close / Cash Out Calculation */}
                     <div style={{ marginTop: '20px', borderTop: '2px solid #7B2CBF', paddingTop: '16px' }}>
                       <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '12px' }}>
-                        {quoteData.loanPurpose === 'purchase' ? 'Calculating Cash to Close' : 'Calculating Cash Out'}
+                        {quoteData.loanPurpose === 'purchase' || (option.cashFlow ?? option.feeBreakdown?.cashToClose ?? 0) <= 0 
+                          ? 'Calculating Cash to Close' 
+                          : 'Calculating Cash Out'}
                       </div>
                       <div style={{ fontSize: '14px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
@@ -1050,7 +1056,11 @@ const ConsumerQuoteView = () => {
                           fontWeight: '700',
                           fontSize: '18px'
                         }}>
-                          <span>{quoteData.loanPurpose === 'purchase' ? 'Estimated Cash to Close' : 'Estimated Cash Out'}</span>
+                          <span>
+                            {quoteData.loanPurpose === 'purchase' || (option.cashFlow ?? option.feeBreakdown?.cashToClose ?? 0) <= 0 
+                              ? 'Estimated Cash to Close' 
+                              : 'Estimated Cash Out'}
+                          </span>
                           <span style={{ color: '#7B2CBF' }}>{formatCurrency(Math.abs(option.cashFlow || option.feeBreakdown?.cashToClose || 0))}</span>
                         </div>
                       </div>
