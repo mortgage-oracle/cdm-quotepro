@@ -1,5 +1,5 @@
 // ============================================================================
-// RESET PASSWORD PAGE
+// RESET PASSWORD PAGE V2
 // Handles password reset from email link
 // ============================================================================
 
@@ -15,28 +15,80 @@ const ResetPassword = () => {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
+  const [verifying, setVerifying] = useState(true);
 
   useEffect(() => {
-    // Supabase will automatically pick up the recovery token from the URL
-    // and establish a session. We need to wait for that.
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        setSessionReady(true);
-      } else {
-        // Listen for auth state change (recovery token processing)
+    const handleRecovery = async () => {
+      try {
+        // Check if there's a hash in the URL (Supabase puts tokens there)
+        const hash = window.location.hash;
+        
+        if (hash && hash.includes('access_token')) {
+          // Parse the hash to get the access token and type
+          const params = new URLSearchParams(hash.substring(1));
+          const accessToken = params.get('access_token');
+          const refreshToken = params.get('refresh_token');
+          const type = params.get('type');
+          
+          if (type === 'recovery' && accessToken) {
+            // Set the session manually
+            const { data, error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken
+            });
+            
+            if (error) {
+              console.error('Session error:', error);
+              setError('Invalid or expired reset link. Please request a new one.');
+              setVerifying(false);
+              return;
+            }
+            
+            if (data?.session) {
+              setSessionReady(true);
+              setVerifying(false);
+              // Clean up the URL
+              window.history.replaceState(null, '', window.location.pathname);
+              return;
+            }
+          }
+        }
+        
+        // Check if there's already a session (maybe from a previous recovery)
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          setSessionReady(true);
+          setVerifying(false);
+          return;
+        }
+        
+        // Listen for auth state change as fallback
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+          console.log('Auth event:', event);
           if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) {
             setSessionReady(true);
+            setVerifying(false);
           }
         });
         
-        // Cleanup
+        // Timeout after 5 seconds
+        setTimeout(() => {
+          if (!sessionReady) {
+            setError('Could not verify reset link. It may have expired. Please request a new password reset.');
+            setVerifying(false);
+          }
+        }, 5000);
+        
         return () => subscription.unsubscribe();
+        
+      } catch (err) {
+        console.error('Recovery error:', err);
+        setError('An error occurred. Please try again or request a new reset link.');
+        setVerifying(false);
       }
     };
     
-    checkSession();
+    handleRecovery();
   }, []);
 
   const handleSubmit = async (e) => {
@@ -156,11 +208,23 @@ const ResetPassword = () => {
             fontSize: '14px'
           }}>
             {error}
+            <div style={{ marginTop: '12px' }}>
+              <a 
+                href="/"
+                style={{
+                  color: '#7B2CBF',
+                  fontSize: '13px',
+                  textDecoration: 'underline'
+                }}
+              >
+                Go to login to request a new reset link
+              </a>
+            </div>
           </div>
         )}
 
-        {/* Not Ready Message */}
-        {!sessionReady && !success && (
+        {/* Verifying Message */}
+        {verifying && !error && !success && (
           <div style={{
             background: '#fef3c7',
             border: '1px solid #fde68a',
@@ -195,7 +259,8 @@ const ResetPassword = () => {
                   border: '2px solid #e0e0e0',
                   borderRadius: '12px',
                   fontSize: '15px',
-                  outline: 'none'
+                  outline: 'none',
+                  boxSizing: 'border-box'
                 }}
               />
             </div>
@@ -215,7 +280,8 @@ const ResetPassword = () => {
                   border: '2px solid #e0e0e0',
                   borderRadius: '12px',
                   fontSize: '15px',
-                  outline: 'none'
+                  outline: 'none',
+                  boxSizing: 'border-box'
                 }}
               />
             </div>
