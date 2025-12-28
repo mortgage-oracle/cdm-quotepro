@@ -1,16 +1,20 @@
 // ============================================================================
-// AUTHENTICATION COMPONENT V3
+// AUTHENTICATION COMPONENT V4
 // Login / Sign Up for Loan Officers
 // ============================================================================
 
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 
+// Allowed email domains for signup
+const ALLOWED_DOMAINS = ['clientdirectmtg.com'];
+
 const AuthComponent = ({ onAuthSuccess }) => {
-  const [mode, setMode] = useState('login');
+  const [mode, setMode] = useState('login'); // 'login', 'signup', 'forgot'
   const [loading, setLoading] = useState(false);
   const [loginStuck, setLoginStuck] = useState(false);
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
   const stuckTimerRef = useRef(null);
   
   const [email, setEmail] = useState('');
@@ -26,6 +30,18 @@ const AuthComponent = ({ onAuthSuccess }) => {
       if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current);
     };
   }, []);
+
+  // Clear messages when switching modes
+  useEffect(() => {
+    setError(null);
+    setSuccess(null);
+  }, [mode]);
+
+  // Check if email domain is allowed
+  const isAllowedDomain = (email) => {
+    const domain = email.split('@')[1]?.toLowerCase();
+    return ALLOWED_DOMAINS.includes(domain);
+  };
 
   // Handle reset when login is stuck (Edge browser issue)
   const handleReset = () => {
@@ -164,6 +180,13 @@ const AuthComponent = ({ onAuthSuccess }) => {
     setLoading(true);
     setError(null);
 
+    // Check email domain
+    if (!isAllowedDomain(email)) {
+      setError('Sign up is restricted to @clientdirectmtg.com email addresses.');
+      setLoading(false);
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       setLoading(false);
@@ -187,7 +210,7 @@ const AuthComponent = ({ onAuthSuccess }) => {
       const { data: lo, error: loError } = await supabase
         .from('loan_officers')
         .insert({
-          email,
+          email: email.toLowerCase(),
           full_name: fullName,
           phone: phone || null,
           nmls_number: nmlsNumber || null,
@@ -204,6 +227,34 @@ const AuthComponent = ({ onAuthSuccess }) => {
 
     } catch (err) {
       setError(err.message || 'Sign up failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    if (!email) {
+      setError('Please enter your email address.');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`
+      });
+
+      if (error) throw error;
+
+      setSuccess('Password reset email sent! Check your inbox.');
+      
+    } catch (err) {
+      setError(err.message || 'Failed to send reset email.');
     } finally {
       setLoading(false);
     }
@@ -241,98 +292,50 @@ const AuthComponent = ({ onAuthSuccess }) => {
             <rect x="47" y="5" width="6" height="22" fill="url(#logoGrad)" transform="rotate(25, 50, 50)" />
             <rect x="47" y="5" width="6" height="18" fill="url(#logoGrad)" transform="rotate(-50, 50, 50)" />
             <rect x="47" y="5" width="6" height="18" fill="url(#logoGrad)" transform="rotate(50, 50, 50)" />
-            <path d="M 15 55 Q 15 85 50 85 Q 85 85 85 55 L 80 55 Q 80 80 50 80 Q 20 80 20 55 Z" fill="url(#logoGrad)" />
-            <path d="M 25 55 Q 25 75 50 75 Q 75 75 75 55 L 70 55 Q 70 70 50 70 Q 30 70 30 55 Z" fill="#3C096C" />
+            <rect x="47" y="5" width="6" height="14" fill="url(#logoGrad)" transform="rotate(-75, 50, 50)" />
+            <rect x="47" y="5" width="6" height="14" fill="url(#logoGrad)" transform="rotate(75, 50, 50)" />
+            <rect x="47" y="5" width="6" height="10" fill="url(#logoGrad)" transform="rotate(-100, 50, 50)" />
+            <rect x="47" y="5" width="6" height="10" fill="url(#logoGrad)" transform="rotate(100, 50, 50)" />
+            <rect x="47" y="5" width="6" height="6" fill="url(#logoGrad)" transform="rotate(-125, 50, 50)" />
+            <rect x="47" y="5" width="6" height="6" fill="url(#logoGrad)" transform="rotate(125, 50, 50)" />
           </svg>
-          <div style={{
-            fontSize: '28px',
-            fontWeight: '700',
-            background: 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            marginTop: '12px'
-          }}>CDM Quote Pro</div>
-          <div style={{ fontSize: '14px', color: '#666', marginTop: '4px' }}>
-            Loan Officer Portal
-          </div>
+          <h1 style={{ fontSize: '28px', fontWeight: '800', marginTop: '16px', color: '#1a1a1a' }}>
+            CDM Quote Pro
+          </h1>
+          <p style={{ color: '#888', fontSize: '14px', marginTop: '4px' }}>
+            {mode === 'login' && 'Sign in to your account'}
+            {mode === 'signup' && 'Create your account'}
+            {mode === 'forgot' && 'Reset your password'}
+          </p>
         </div>
 
-        {/* Tabs */}
-        <div style={{
-          display: 'flex',
-          gap: '4px',
-          marginBottom: '24px',
-          background: '#f0f0f0',
-          borderRadius: '12px',
-          padding: '4px'
-        }}>
-          <button 
-            onClick={() => { setMode('login'); setError(null); }}
-            style={{
-              flex: 1,
-              padding: '12px',
-              border: 'none',
-              borderRadius: '10px',
-              background: mode === 'login' ? 'white' : 'transparent',
-              color: mode === 'login' ? '#7B2CBF' : '#666',
-              fontWeight: '600',
-              fontSize: '14px',
-              cursor: 'pointer',
-              boxShadow: mode === 'login' ? '0 2px 8px rgba(0,0,0,0.1)' : 'none'
-            }}
-          >
-            Sign In
-          </button>
-          <button 
-            onClick={() => { setMode('signup'); setError(null); }}
-            style={{
-              flex: 1,
-              padding: '12px',
-              border: 'none',
-              borderRadius: '10px',
-              background: mode === 'signup' ? 'white' : 'transparent',
-              color: mode === 'signup' ? '#7B2CBF' : '#666',
-              fontWeight: '600',
-              fontSize: '14px',
-              cursor: 'pointer',
-              boxShadow: mode === 'signup' ? '0 2px 8px rgba(0,0,0,0.1)' : 'none'
-            }}
-          >
-            Create Account
-          </button>
-        </div>
-
-        {/* Error */}
+        {/* Error Message */}
         {error && (
           <div style={{
-            background: '#FEE2E2',
-            color: '#DC2626',
+            background: '#fee2e2',
+            border: '1px solid #fecaca',
+            borderRadius: '12px',
             padding: '12px 16px',
-            borderRadius: '10px',
-            fontSize: '14px',
-            marginBottom: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
+            marginBottom: '20px',
+            color: '#dc2626',
+            fontSize: '14px'
           }}>
-            <span>⚠️</span>
             {error}
           </div>
         )}
-        
-        {/* Stuck Warning - Edge browser issue */}
-        {loginStuck && !error && (
+
+        {/* Success Message */}
+        {success && (
           <div style={{
-            background: '#FEF3C7',
-            color: '#92400E',
+            background: '#dcfce7',
+            border: '1px solid #bbf7d0',
+            borderRadius: '12px',
             padding: '12px 16px',
-            borderRadius: '10px',
-            fontSize: '13px',
-            marginBottom: '16px',
-            lineHeight: '1.5'
+            marginBottom: '20px',
+            color: '#166534',
+            fontSize: '14px'
           }}>
-            <div style={{ fontWeight: '600', marginBottom: '4px' }}>⏳ Taking longer than expected...</div>
-            <div>If login doesn't complete, click the "Reset & Try Again" button below.</div>
+            {success}
           </div>
         )}
 
@@ -347,7 +350,7 @@ const AuthComponent = ({ onAuthSuccess }) => {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@cdmortgage.com"
+                placeholder="you@clientdirectmtg.com"
                 required
                 style={{
                   width: '100%',
@@ -379,6 +382,25 @@ const AuthComponent = ({ onAuthSuccess }) => {
                 }}
               />
             </div>
+            
+            {/* Forgot Password Link */}
+            <div style={{ textAlign: 'right', marginTop: '-8px' }}>
+              <button
+                type="button"
+                onClick={() => setMode('forgot')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#7B2CBF',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  padding: 0
+                }}
+              >
+                Forgot password?
+              </button>
+            </div>
+            
             <button 
               type="submit" 
               disabled={loading}
@@ -423,12 +445,110 @@ const AuthComponent = ({ onAuthSuccess }) => {
                 <span>🔄</span> Reset & Try Again
               </button>
             )}
+            
+            {/* Sign Up Link */}
+            <div style={{ textAlign: 'center', marginTop: '16px' }}>
+              <span style={{ color: '#888', fontSize: '14px' }}>Don't have an account? </span>
+              <button
+                type="button"
+                onClick={() => setMode('signup')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#7B2CBF',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  padding: 0
+                }}
+              >
+                Sign up
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Forgot Password Form */}
+        {mode === 'forgot' && (
+          <form onSubmit={handleForgotPassword} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <p style={{ color: '#666', fontSize: '14px', marginBottom: '8px' }}>
+              Enter your email address and we'll send you a link to reset your password.
+            </p>
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: '600', color: '#333', display: 'block', marginBottom: '6px' }}>
+                Email
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@clientdirectmtg.com"
+                required
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  border: '2px solid #e0e0e0',
+                  borderRadius: '12px',
+                  fontSize: '15px',
+                  outline: 'none'
+                }}
+              />
+            </div>
+            <button 
+              type="submit" 
+              disabled={loading}
+              style={{
+                padding: '16px',
+                background: 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                fontSize: '16px',
+                fontWeight: '700',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: loading ? 0.7 : 1,
+                marginTop: '8px'
+              }}
+            >
+              {loading ? 'Sending...' : 'Send Reset Link'}
+            </button>
+            
+            {/* Back to Login */}
+            <div style={{ textAlign: 'center', marginTop: '16px' }}>
+              <button
+                type="button"
+                onClick={() => setMode('login')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#7B2CBF',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  padding: 0
+                }}
+              >
+                ← Back to Sign In
+              </button>
+            </div>
           </form>
         )}
 
         {/* Sign Up Form */}
         {mode === 'signup' && (
           <form onSubmit={handleSignUp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Domain Notice */}
+            <div style={{
+              background: '#f0f9ff',
+              border: '1px solid #bae6fd',
+              borderRadius: '12px',
+              padding: '12px 16px',
+              color: '#0369a1',
+              fontSize: '13px'
+            }}>
+              🔒 Sign up is restricted to <strong>@clientdirectmtg.com</strong> email addresses.
+            </div>
+            
             <div>
               <label style={{ fontSize: '13px', fontWeight: '600', color: '#333', display: 'block', marginBottom: '6px' }}>
                 Full Name *
@@ -457,7 +577,7 @@ const AuthComponent = ({ onAuthSuccess }) => {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@cdmortgage.com"
+                placeholder="you@clientdirectmtg.com"
                 required
                 style={{
                   width: '100%',
@@ -567,6 +687,26 @@ const AuthComponent = ({ onAuthSuccess }) => {
             >
               {loading ? 'Creating Account...' : 'Create Account'}
             </button>
+            
+            {/* Back to Login */}
+            <div style={{ textAlign: 'center', marginTop: '16px' }}>
+              <span style={{ color: '#888', fontSize: '14px' }}>Already have an account? </span>
+              <button
+                type="button"
+                onClick={() => setMode('login')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#7B2CBF',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  padding: 0
+                }}
+              >
+                Sign in
+              </button>
+            </div>
           </form>
         )}
 
