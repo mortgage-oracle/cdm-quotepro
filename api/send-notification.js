@@ -1,9 +1,9 @@
-import { Resend } from 'resend';
+const { Resend } = require('resend');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-export default async function handler(req, res) {
-  // Only allow POST requests
+module.exports = async function handler(req, res) {
+  // Only allow POST requests V2
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -23,7 +23,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const quoteUrl = `https://www.cdmquotepro.com/quote/${shareId}`;
     const appUrl = 'https://www.cdmquotepro.com';
     const quoteTypeLabel = quoteType === 'home_equity' ? 'Home Equity' : 'Purchase/Refi';
 
@@ -118,13 +117,13 @@ export default async function handler(req, res) {
 
     if (error) {
       console.error('Resend error:', error);
-      return res.status(500).json({ error: 'Failed to send email' });
+      return res.status(500).json({ error: 'Failed to send email', details: error.message });
     }
 
     return res.status(200).json({ success: true, messageId: data?.id });
     
   } catch (error) {
     console.error('Email notification error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error', details: error.message });
   }
-}
+};
