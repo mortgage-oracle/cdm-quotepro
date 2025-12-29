@@ -1,5 +1,5 @@
 // ============================================================================
-// CDM QUOTE PRO - MAIN APP V9
+// CDM QUOTE PRO - MAIN APP V8
 // Routes between LO tool and consumer quote view
 // Fixed: Login loop issue in Edge browser
 // ============================================================================
@@ -108,8 +108,8 @@ function App() {
         clearAccessToken(); // Clear cached token
         setUser(null);
         setLoanOfficer(null);
-      } else if (event === 'SIGNED_IN' && session?.user) {
-        console.log('User signed in, loading loan officer...');
+      } else if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') && session?.user) {
+        console.log(`${event} - loading loan officer...`);
         // Cache the access token for Edge browser compatibility
         if (session.access_token) {
           setAccessToken(session.access_token);
@@ -160,15 +160,15 @@ function App() {
       
       const { data: { session }, error } = await getSessionWithTimeout();
       
+      // Only log errors, don't clear storage aggressively
       if (error && error.message !== 'Timeout') {
-        console.log('Session check error:', error.message);
-        clearAllAuthStorage();
-        return;
+        console.log('Session check returned error:', error.message);
+        // Don't clear storage - let onAuthStateChange handle it
       }
       
       if (error?.message === 'Timeout') {
-        console.log('Session check timed out - showing login screen');
-        return;
+        console.log('Session check timed out - will rely on onAuthStateChange');
+        // Don't return here - onAuthStateChange may still fire with session
       }
       
       console.log('Session result:', session ? 'Found' : 'None');
@@ -186,7 +186,9 @@ function App() {
       }
     } catch (error) {
       console.error('Session check error:', error);
-      if (error.message?.includes('auth') || error.message?.includes('token')) {
+      // Only clear on explicit auth/token errors, not general errors
+      if (error.message?.includes('Invalid Refresh Token') || error.message?.includes('JWT expired')) {
+        console.log('Auth token invalid - clearing storage');
         clearAllAuthStorage();
       }
     }
