@@ -48,6 +48,19 @@ export default async function handler(req, res) {
                       </table>
     ` : '';
 
+    // Call Now button if phone available
+    const callNowButton = clientPhone ? `
+                      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 16px;">
+                        <tr>
+                          <td align="center">
+                            <a href="tel:${clientPhone}" style="display: inline-block; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 14px;">
+                              📞 Call ${clientName} Now
+                            </a>
+                          </td>
+                        </tr>
+                      </table>
+    ` : '';
+
     const { data, error } = await resend.emails.send({
       from: 'CDM Quote Pro <notifications@cdmquotepro.com>',
       to: loanOfficerEmail,
@@ -107,6 +120,19 @@ export default async function handler(req, res) {
                       <p style="margin: 0 0 24px; color: #666666; font-size: 14px; line-height: 1.5;">
                         Now is a great time to follow up while they're actively reviewing options!
                       </p>
+                      
+                      ${callNowButton}
+                      
+                      <!-- View Quote Button -->
+                      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 16px;">
+                        <tr>
+                          <td align="center">
+                            <a href="${quoteUrl}" style="display: inline-block; background: linear-gradient(135deg, #6c757d 0%, #495057 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 14px;">
+                              👁️ View Quote
+                            </a>
+                          </td>
+                        </tr>
+                      </table>
                       
                       <!-- CTA Button -->
                       <table width="100%" cellpadding="0" cellspacing="0">
