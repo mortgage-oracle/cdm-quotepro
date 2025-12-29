@@ -26,7 +26,6 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const quoteUrl = `https://www.cdmquotepro.com/quote/${shareId}`;
     const appUrl = 'https://www.cdmquotepro.com';
     const quoteTypeLabel = quoteType === 'home_equity' ? 'Home Equity' : 'Purchase/Refi';
     const firstName = clientName.split(' ')[0];
@@ -131,23 +130,6 @@ export default async function handler(req, res) {
                       </p>
                       
                       ${callNowButton}
-                      
-                      <!-- View Quote Button -->
-                      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 12px;">
-                        <tr>
-                          <td align="center">
-                            <table cellpadding="0" cellspacing="0" border="0" width="260">
-                              <tr>
-                                <td align="center" bgcolor="#6c757d" style="border-radius: 6px;">
-                                  <a href="${quoteUrl}" target="_blank" style="display: block; padding: 14px 20px; font-size: 14px; color: #ffffff; text-decoration: none; font-weight: bold; font-family: Arial, sans-serif; text-align: center;">
-                                    VIEW QUOTE
-                                  </a>
-                                </td>
-                              </tr>
-                            </table>
-                          </td>
-                        </tr>
-                      </table>
                       
                       <!-- Open App Button -->
                       <table width="100%" cellpadding="0" cellspacing="0" border="0">
