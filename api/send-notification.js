@@ -2,38 +2,6 @@ import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Simple in-memory rate limiting (resets on cold start, but provides basic protection)
-const rateLimitMap = new Map();
-const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const MAX_REQUESTS_PER_WINDOW = 5; // Max 5 emails per minute per LO
-
-function checkRateLimit(email) {
-  const now = Date.now();
-  const key = email.toLowerCase();
-  
-  if (!rateLimitMap.has(key)) {
-    rateLimitMap.set(key, { count: 1, windowStart: now });
-    return true;
-  }
-  
-  const record = rateLimitMap.get(key);
-  
-  // Reset window if expired
-  if (now - record.windowStart > RATE_LIMIT_WINDOW) {
-    rateLimitMap.set(key, { count: 1, windowStart: now });
-    return true;
-  }
-  
-  // Check if over limit
-  if (record.count >= MAX_REQUESTS_PER_WINDOW) {
-    return false;
-  }
-  
-  // Increment count
-  record.count++;
-  return true;
-}
-
 export default async function handler(req, res) {
   // Only allow POST requests
   if (req.method !== 'POST') {
@@ -44,7 +12,10 @@ export default async function handler(req, res) {
     const { 
       loanOfficerEmail, 
       loanOfficerName,
-      clientName, 
+      clientName,
+      clientEmail,
+      clientPhone,
+      propertyAddress,
       quoteLabel,
       quoteType,
       shareId
@@ -55,14 +26,27 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Check rate limit
-    if (!checkRateLimit(loanOfficerEmail)) {
-      console.log('Rate limit exceeded for:', loanOfficerEmail);
-      return res.status(429).json({ error: 'Too many requests. Please try again later.' });
-    }
-
+    const quoteUrl = `https://www.cdmquotepro.com/quote/${shareId}`;
     const appUrl = 'https://www.cdmquotepro.com';
     const quoteTypeLabel = quoteType === 'home_equity' ? 'Home Equity' : 'Purchase/Refi';
+
+    // Build client contact section if details available
+    const hasContactInfo = clientEmail || clientPhone || propertyAddress;
+    const contactSection = hasContactInfo ? `
+                      <!-- Client Contact Card -->
+                      <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f0e6f7; border-radius: 12px; margin-bottom: 24px; border-left: 4px solid #7B2CBF;">
+                        <tr>
+                          <td style="padding: 20px;">
+                            <p style="margin: 0 0 12px; color: #7B2CBF; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
+                              📋 Client Contact Info
+                            </p>
+                            ${clientEmail ? `<p style="margin: 0 0 6px; color: #333333; font-size: 14px;">📧 <a href="mailto:${clientEmail}" style="color: #7B2CBF; text-decoration: none;">${clientEmail}</a></p>` : ''}
+                            ${clientPhone ? `<p style="margin: 0 0 6px; color: #333333; font-size: 14px;">📱 <a href="tel:${clientPhone}" style="color: #7B2CBF; text-decoration: none;">${clientPhone}</a></p>` : ''}
+                            ${propertyAddress ? `<p style="margin: 0; color: #333333; font-size: 14px;">🏠 ${propertyAddress}</p>` : ''}
+                          </td>
+                        </tr>
+                      </table>
+    ` : '';
 
     const { data, error } = await resend.emails.send({
       from: 'CDM Quote Pro <notifications@cdmquotepro.com>',
@@ -100,6 +84,8 @@ export default async function handler(req, res) {
                       <p style="margin: 0 0 24px; color: #333333; font-size: 16px; line-height: 1.5;">
                         <strong>${clientName}</strong> just viewed the quote you sent them.
                       </p>
+                      
+                      ${contactSection}
                       
                       <!-- Quote Details Card -->
                       <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8f8f8; border-radius: 12px; margin-bottom: 24px;">
