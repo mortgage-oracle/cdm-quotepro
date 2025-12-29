@@ -70,7 +70,7 @@ export default async function handler(req, res) {
     const { data, error } = await resend.emails.send({
       from: 'CDM Quote Pro <notifications@cdmquotepro.com>',
       to: loanOfficerEmail,
-      subject: `Quote Viewed: ${clientName}`,
+      subject: `🔔 Quote Viewed: ${clientName}`,
       html: `
         <!DOCTYPE html>
         <html>
