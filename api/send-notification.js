@@ -29,33 +29,40 @@ export default async function handler(req, res) {
     const quoteUrl = `https://www.cdmquotepro.com/quote/${shareId}`;
     const appUrl = 'https://www.cdmquotepro.com';
     const quoteTypeLabel = quoteType === 'home_equity' ? 'Home Equity' : 'Purchase/Refi';
+    const firstName = clientName.split(' ')[0];
 
     // Build client contact section if details available
     const hasContactInfo = clientEmail || clientPhone || propertyAddress;
     const contactSection = hasContactInfo ? `
                       <!-- Client Contact Card -->
-                      <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f0e6f7; border-radius: 12px; margin-bottom: 24px; border-left: 4px solid #7B2CBF;">
+                      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;">
                         <tr>
-                          <td style="padding: 20px;">
-                            <p style="margin: 0 0 12px; color: #7B2CBF; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">
-                              📋 Client Contact Info
+                          <td style="background-color: #f0e6f7; border-left: 4px solid #7B2CBF; padding: 16px;">
+                            <p style="margin: 0 0 10px; color: #7B2CBF; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; font-family: Arial, sans-serif;">
+                              Client Contact Info
                             </p>
-                            ${clientEmail ? `<p style="margin: 0 0 6px; color: #333333; font-size: 14px;">📧 <a href="mailto:${clientEmail}" style="color: #7B2CBF; text-decoration: none;">${clientEmail}</a></p>` : ''}
-                            ${clientPhone ? `<p style="margin: 0 0 6px; color: #333333; font-size: 14px;">📱 <a href="tel:${clientPhone}" style="color: #7B2CBF; text-decoration: none;">${clientPhone}</a></p>` : ''}
-                            ${propertyAddress ? `<p style="margin: 0; color: #333333; font-size: 14px;">🏠 ${propertyAddress}</p>` : ''}
+                            ${clientEmail ? `<p style="margin: 0 0 6px; color: #333333; font-size: 14px; font-family: Arial, sans-serif;">Email: <a href="mailto:${clientEmail}" style="color: #7B2CBF;">${clientEmail}</a></p>` : ''}
+                            ${clientPhone ? `<p style="margin: 0 0 6px; color: #333333; font-size: 14px; font-family: Arial, sans-serif;">Phone: <a href="tel:${clientPhone}" style="color: #7B2CBF;">${clientPhone}</a></p>` : ''}
+                            ${propertyAddress ? `<p style="margin: 0; color: #333333; font-size: 14px; font-family: Arial, sans-serif;">Address: ${propertyAddress}</p>` : ''}
                           </td>
                         </tr>
                       </table>
     ` : '';
 
-    // Call Now button if phone available
+    // Call Now button - bulletproof style for Outlook
     const callNowButton = clientPhone ? `
-                      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 16px;">
+                      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 12px;">
                         <tr>
                           <td align="center">
-                            <a href="tel:${clientPhone}" style="display: inline-block; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 14px;">
-                              📞 Call ${clientName} Now
-                            </a>
+                            <table cellpadding="0" cellspacing="0" width="260">
+                              <tr>
+                                <td align="center" bgcolor="#28a745" style="border-radius: 6px;">
+                                  <a href="tel:${clientPhone}" target="_blank" style="display: block; padding: 14px 20px; font-size: 14px; color: #ffffff; text-decoration: none; font-weight: bold; font-family: Arial, sans-serif; text-align: center;">
+                                    CALL ${firstName.toUpperCase()} NOW
+                                  </a>
+                                </td>
+                              </tr>
+                            </table>
                           </td>
                         </tr>
                       </table>
@@ -64,83 +71,97 @@ export default async function handler(req, res) {
     const { data, error } = await resend.emails.send({
       from: 'CDM Quote Pro <notifications@cdmquotepro.com>',
       to: loanOfficerEmail,
-      subject: `🔔 ${clientName} viewed your quote`,
+      subject: `Quote Viewed: ${clientName}`,
       html: `
         <!DOCTYPE html>
         <html>
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <meta http-equiv="X-UA-Compatible" content="IE=edge">
+          <title>Quote Viewed</title>
         </head>
-        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 40px 20px;">
+        <body style="margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; background-color: #f5f5f5; -webkit-font-smoothing: antialiased;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f5f5f5;">
             <tr>
-              <td align="center">
-                <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 500px; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
+              <td align="center" style="padding: 40px 20px;">
+                <table role="presentation" width="500" cellpadding="0" cellspacing="0" border="0" style="max-width: 500px; width: 100%; background-color: #ffffff;">
                   
                   <!-- Header -->
                   <tr>
-                    <td style="background: linear-gradient(135deg, #7B2CBF 0%, #3C096C 100%); padding: 32px; text-align: center;">
-                      <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">
-                        🔔 Quote Viewed!
+                    <td align="center" bgcolor="#7B2CBF" style="padding: 28px 20px;">
+                      <h1 style="margin: 0; color: #ffffff; font-size: 22px; font-weight: bold; font-family: Arial, sans-serif;">
+                        Quote Viewed!
                       </h1>
                     </td>
                   </tr>
                   
                   <!-- Content -->
                   <tr>
-                    <td style="padding: 32px;">
-                      <p style="margin: 0 0 24px; color: #333333; font-size: 16px; line-height: 1.5;">
+                    <td style="padding: 28px 24px;">
+                      <p style="margin: 0 0 20px; color: #333333; font-size: 15px; line-height: 1.5; font-family: Arial, sans-serif;">
                         Hi ${loanOfficerName || 'there'},
                       </p>
                       
-                      <p style="margin: 0 0 24px; color: #333333; font-size: 16px; line-height: 1.5;">
+                      <p style="margin: 0 0 20px; color: #333333; font-size: 15px; line-height: 1.5; font-family: Arial, sans-serif;">
                         <strong>${clientName}</strong> just viewed the quote you sent them.
                       </p>
                       
                       ${contactSection}
                       
                       <!-- Quote Details Card -->
-                      <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f8f8f8; border-radius: 12px; margin-bottom: 24px;">
+                      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 20px;">
                         <tr>
-                          <td style="padding: 20px;">
-                            <p style="margin: 0 0 8px; color: #888888; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
+                          <td style="background-color: #f8f8f8; padding: 16px;">
+                            <p style="margin: 0 0 6px; color: #888888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; font-family: Arial, sans-serif;">
                               Quote Details
                             </p>
-                            <p style="margin: 0 0 4px; color: #333333; font-size: 16px; font-weight: 600;">
+                            <p style="margin: 0 0 4px; color: #333333; font-size: 15px; font-weight: bold; font-family: Arial, sans-serif;">
                               ${quoteLabel || 'Quote'}
                             </p>
-                            <p style="margin: 0; color: #666666; font-size: 14px;">
+                            <p style="margin: 0; color: #666666; font-size: 13px; font-family: Arial, sans-serif;">
                               ${quoteTypeLabel}
                             </p>
                           </td>
                         </tr>
                       </table>
                       
-                      <p style="margin: 0 0 24px; color: #666666; font-size: 14px; line-height: 1.5;">
+                      <p style="margin: 0 0 24px; color: #666666; font-size: 14px; line-height: 1.5; font-family: Arial, sans-serif;">
                         Now is a great time to follow up while they're actively reviewing options!
                       </p>
                       
                       ${callNowButton}
                       
                       <!-- View Quote Button -->
-                      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 16px;">
+                      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 12px;">
                         <tr>
                           <td align="center">
-                            <a href="${quoteUrl}" style="display: inline-block; background: linear-gradient(135deg, #6c757d 0%, #495057 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 14px;">
-                              👁️ View Quote
-                            </a>
+                            <table cellpadding="0" cellspacing="0" border="0" width="260">
+                              <tr>
+                                <td align="center" bgcolor="#6c757d" style="border-radius: 6px;">
+                                  <a href="${quoteUrl}" target="_blank" style="display: block; padding: 14px 20px; font-size: 14px; color: #ffffff; text-decoration: none; font-weight: bold; font-family: Arial, sans-serif; text-align: center;">
+                                    VIEW QUOTE
+                                  </a>
+                                </td>
+                              </tr>
+                            </table>
                           </td>
                         </tr>
                       </table>
                       
-                      <!-- CTA Button -->
-                      <table width="100%" cellpadding="0" cellspacing="0">
+                      <!-- Open App Button -->
+                      <table width="100%" cellpadding="0" cellspacing="0" border="0">
                         <tr>
                           <td align="center">
-                            <a href="${appUrl}" style="display: inline-block; background: linear-gradient(135deg, #7B2CBF 0%, #9D4EDD 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 14px;">
-                              Open CDM Quote Pro
-                            </a>
+                            <table cellpadding="0" cellspacing="0" border="0" width="260">
+                              <tr>
+                                <td align="center" bgcolor="#7B2CBF" style="border-radius: 6px;">
+                                  <a href="${appUrl}" target="_blank" style="display: block; padding: 14px 20px; font-size: 14px; color: #ffffff; text-decoration: none; font-weight: bold; font-family: Arial, sans-serif; text-align: center;">
+                                    OPEN CDM QUOTE PRO
+                                  </a>
+                                </td>
+                              </tr>
+                            </table>
                           </td>
                         </tr>
                       </table>
@@ -149,9 +170,9 @@ export default async function handler(req, res) {
                   
                   <!-- Footer -->
                   <tr>
-                    <td style="padding: 24px 32px; border-top: 1px solid #e0e0e0; text-align: center;">
-                      <p style="margin: 0; color: #888888; font-size: 12px;">
-                        CDM Quote Pro • Client Direct Mortgage
+                    <td style="padding: 20px 24px; border-top: 1px solid #e0e0e0; text-align: center;">
+                      <p style="margin: 0; color: #888888; font-size: 12px; font-family: Arial, sans-serif;">
+                        CDM Quote Pro - Client Direct Mortgage
                       </p>
                     </td>
                   </tr>
