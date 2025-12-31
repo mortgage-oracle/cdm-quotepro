@@ -1,5 +1,5 @@
 // ============================================================================
-// SUPABASE CLIENT CONFIGURATION V5
+// SUPABASE CLIENT CONFIGURATION V6
 // CDM Quote Pro - Database Connection
 // ============================================================================
 
@@ -734,6 +734,244 @@ export function getDaysUntilExpiry(quote) {
   const diffTime = expiryDate - now;
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   return diffDays;
+}
+
+// ============================================================================
+// ADMIN DASHBOARD FUNCTIONS
+// ============================================================================
+
+/**
+ * Update user's last_activity timestamp
+ * Call this on meaningful user actions
+ */
+export async function updateLastActivity(loanOfficerId) {
+  if (!loanOfficerId) return;
+  
+  const token = await getAuthToken();
+  
+  try {
+    await fetch(
+      `${SUPABASE_URL}/rest/v1/loan_officers?id=eq.${loanOfficerId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${token || SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({ last_activity: new Date().toISOString() })
+      }
+    );
+  } catch (err) {
+    // Silent fail - don't disrupt user experience for activity tracking
+    console.log('Activity update failed (non-critical):', err.message);
+  }
+}
+
+/**
+ * Get admin dashboard statistics
+ * Only works for admin users due to RLS
+ */
+export async function getAdminDashboardStats() {
+  const token = await getAuthToken();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/admin_dashboard_stats?select=*`,
+      {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${token || SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        signal: controller.signal
+      }
+    );
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return { data: data[0] || {}, error: null };
+  } catch (err) {
+    console.error('Error fetching admin stats:', err);
+    return { data: null, error: err };
+  }
+}
+
+/**
+ * Get leaderboard data
+ * Available to all authenticated users
+ */
+export async function getLeaderboardData() {
+  const token = await getAuthToken();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/leaderboard_stats?select=*&is_active=eq.true&order=total_quotes.desc`,
+      {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${token || SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        signal: controller.signal
+      }
+    );
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return { data, error: null };
+  } catch (err) {
+    console.error('Error fetching leaderboard:', err);
+    return { data: null, error: err };
+  }
+}
+
+/**
+ * Get all loan officers with metrics (Admin only)
+ */
+export async function getAllLoanOfficersAdmin() {
+  const token = await getAuthToken();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/leaderboard_stats?select=*&order=total_quotes.desc`,
+      {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${token || SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        signal: controller.signal
+      }
+    );
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return { data, error: null };
+  } catch (err) {
+    console.error('Error fetching all LOs:', err);
+    return { data: null, error: err };
+  }
+}
+
+/**
+ * Toggle loan officer active status (Admin only)
+ */
+export async function toggleLoanOfficerStatus(loanOfficerId, isActive) {
+  const token = await getAuthToken();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/loan_officers?id=eq.${loanOfficerId}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${token || SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify({ is_active: isActive }),
+        signal: controller.signal
+      }
+    );
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return { data: data[0], error: null };
+  } catch (err) {
+    console.error('Error toggling LO status:', err);
+    return { data: null, error: err };
+  }
+}
+
+/**
+ * Export loan officers to CSV format (returns CSV string)
+ */
+export function exportLoanOfficersToCSV(loanOfficers) {
+  const headers = [
+    'Name',
+    'Email',
+    'NMLS#',
+    'Status',
+    'Account',
+    'Total Quotes',
+    'Quotes Shared',
+    'Views',
+    'Apply Clicks',
+    'View Rate %',
+    'Registered',
+    'Last Active'
+  ];
+  
+  const rows = loanOfficers.map(lo => [
+    lo.full_name || '',
+    lo.email || '',
+    lo.nmls_number || '',
+    lo.is_online ? 'Online' : 'Offline',
+    lo.is_active ? 'Active' : 'Deactivated',
+    lo.total_quotes || 0,
+    lo.quotes_shared || 0,
+    lo.total_views || 0,
+    lo.apply_clicks || 0,
+    lo.view_rate_percent || 0,
+    lo.registered_at ? new Date(lo.registered_at).toLocaleDateString() : '',
+    lo.last_activity ? new Date(lo.last_activity).toLocaleString() : 'Never'
+  ]);
+  
+  const csvContent = [
+    headers.join(','),
+    ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+  ].join('\n');
+  
+  return csvContent;
+}
+
+/**
+ * Download CSV file
+ */
+export function downloadCSV(csvContent, filename) {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
 
 export default supabase;
