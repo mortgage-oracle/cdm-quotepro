@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V27
+// CDM QUOTE PRO - Main Application V28
 // ============================================================================
 
 // ============================================================================
@@ -244,8 +244,13 @@ const calculateMonthlyPMI = (loanAmount, creditScore, ltv, loanProgram, rates = 
 };
 
 // Calculate upfront MIP/Funding Fee
-// Calculate VA Funding Fee based on down payment and usage type
-const calculateVAFundingFee = (loanAmount, downPaymentPercent, isFirstUse = true) => {
+// Calculate VA Funding Fee based on down payment, usage type, and IRRRL status
+const calculateVAFundingFee = (loanAmount, downPaymentPercent, isFirstUse = true, isIRRRL = false) => {
+  // VA IRRRL (Interest Rate Reduction Refinance Loan) has flat 0.5% fee
+  if (isIRRRL) {
+    return loanAmount * 0.005; // 0.5% for IRRRL
+  }
+  
   // VA Funding Fee table (as of 2024)
   // First use rates:
   // - 0% down: 2.15%
@@ -790,6 +795,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
   const [isVeteran, setIsVeteran] = useState(false);
   const [vaFundingFeeExempt, setVaFundingFeeExempt] = useState(false); // Disabled veteran exemption
   const [vaFundingFeeFinanced, setVaFundingFeeFinanced] = useState(true); // Finance vs pay at closing
+  const [vaIsIRRRL, setVaIsIRRRL] = useState(false); // VA Interest Rate Reduction Refinance Loan
   const [fhaMIPFinanced, setFhaMIPFinanced] = useState(true); // Finance vs pay at closing
   const [baseLoanAmount, setBaseLoanAmount] = useState(400000);
   
@@ -824,9 +830,11 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
     { name: 'No Cost', rate: 7.000, price: 101.00 }
   ]);
   
-  // Loan Officer Compensation (percentage of loan amount)
+  // Loan Officer Compensation (percentage and/or dollar amount)
   const [loCompensation, setLoCompensation] = useState(0); // e.g., 2.0 = 2%
-  const [loCompensationHE, setLoCompensationHE] = useState(0); // Home Equity LO comp
+  const [loCompensationDollar, setLoCompensationDollar] = useState(0); // flat dollar amount
+  const [loCompensationHE, setLoCompensationHE] = useState(0); // Home Equity LO comp %
+  const [loCompensationDollarHE, setLoCompensationDollarHE] = useState(0); // Home Equity LO comp $
   
   // ============================================================================
   // FEE TEMPLATES (Admin-level defaults)
@@ -1213,6 +1221,13 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
     }
   }, [loanPurpose]);
   
+  // Reset VA IRRRL when loan purpose changes away from Rate/Term or program changes away from VA
+  useEffect(() => {
+    if (loanPurpose !== 'rateTerm' || loanProgram !== 'va') {
+      setVaIsIRRRL(false);
+    }
+  }, [loanPurpose, loanProgram]);
+  
   // Share quote handler
   const handleShareQuote = async (quoteData) => {
     console.log('handleShareQuote called with:', quoteData);
@@ -1529,9 +1544,9 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
         upfrontFeeLabel = 'FHA Upfront MIP';
       } else if (loanProgram === 'va' && !vaFundingFeeExempt) {
         const dpPercent = loanPurpose === 'purchase' ? (propertyDetails.downPaymentPercent || 0) : 0;
-        upfrontFee = calculateVAFundingFee(baseLoanAmount, dpPercent);
+        upfrontFee = calculateVAFundingFee(baseLoanAmount, dpPercent, true, vaIsIRRRL);
         upfrontFeeFinanced = vaFundingFeeFinanced;
-        upfrontFeeLabel = 'VA Funding Fee';
+        upfrontFeeLabel = vaIsIRRRL ? 'VA IRRRL Funding Fee' : 'VA Funding Fee';
       }
       
       // Amount added to loan (if financed)
@@ -1719,7 +1734,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
       clientInfo.state, feeTemplates, effectivePrepaidSettings, baseLTV, 
       loanPurpose, propertyDetails, monthlyEscrow, titleFees, loCompensation, monthlyTax, monthlyHOI,
       propertyTaxRates, titleInsuranceRates, baseTitleFees, pmiRates, recordingFees, transferTaxRates,
-      rateType, armConfig, vaFundingFeeExempt, vaFundingFeeFinanced, fhaMIPFinanced]);
+      rateType, armConfig, vaFundingFeeExempt, vaFundingFeeFinanced, vaIsIRRRL, fhaMIPFinanced]);
 
   // Amortization schedule
   const amortSchedule = useMemo(() => {
@@ -2008,6 +2023,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
         isVeteran,
         vaFundingFeeExempt,
         vaFundingFeeFinanced,
+        vaIsIRRRL,
         fhaMIPFinanced,
         rateType,
         armConfig: rateType === 'arm' ? { ...armConfig } : null,
@@ -2015,6 +2031,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
         calculations: calculations.slice(0, 3),
         rateOptions: [...rateOptions],
         loCompensation,
+        loCompensationDollar,
         prepaidSettings: { ...effectivePrepaidSettings },
         feeOverrides: { ...feeOverrides },
         recommendedIndex: recommendedQuote,
@@ -2078,12 +2095,14 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
       // FHA/VA fee settings
       if (data.vaFundingFeeExempt !== undefined) setVaFundingFeeExempt(data.vaFundingFeeExempt);
       if (data.vaFundingFeeFinanced !== undefined) setVaFundingFeeFinanced(data.vaFundingFeeFinanced);
+      if (data.vaIsIRRRL !== undefined) setVaIsIRRRL(data.vaIsIRRRL);
       if (data.fhaMIPFinanced !== undefined) setFhaMIPFinanced(data.fhaMIPFinanced);
       if (data.rateType) setRateType(data.rateType);
       if (data.armConfig) setArmConfig(data.armConfig);
       if (data.propertyDetails) setPropertyDetails(data.propertyDetails);
       if (data.rateOptions) setRateOptions(data.rateOptions);
       if (data.loCompensation !== undefined) setLoCompensation(data.loCompensation);
+      if (data.loCompensationDollar !== undefined) setLoCompensationDollar(data.loCompensationDollar);
       if (data.prepaidSettings) setPrepaidSettings({ ...data.prepaidSettings, isModified: true });
       if (data.feeOverrides) setFeeOverrides(data.feeOverrides);
       if (data.recommendedIndex !== undefined) setRecommendedQuote(data.recommendedIndex);
@@ -2520,6 +2539,18 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                       />
                       <span style={{ fontSize: '13px' }}>Exempt (10%+ disability)</span>
                     </label>
+                    {/* IRRRL option - only show for Rate/Term refinance */}
+                    {loanPurpose === 'rateTerm' && !vaFundingFeeExempt && (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '8px' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={vaIsIRRRL} 
+                          onChange={(e) => setVaIsIRRRL(e.target.checked)} 
+                        />
+                        <span style={{ fontSize: '13px' }}>IRRRL (Interest Rate Reduction Refi)</span>
+                        {vaIsIRRRL && <span style={{ fontSize: '10px', color: '#7B2CBF', fontWeight: '600' }}>0.5% fee</span>}
+                      </label>
+                    )}
                     {!vaFundingFeeExempt && (
                       <>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '8px' }}>
@@ -2539,7 +2570,8 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                           </button>
                         </div>
                         <div style={{ fontSize: '11px', color: '#7B2CBF', marginTop: '6px', fontWeight: '600' }}>
-                          Fee: {formatCurrency(calculateVAFundingFee(baseLoanAmount, loanPurpose === 'purchase' ? (propertyDetails.downPaymentPercent || 0) : 0))}
+                          Fee: {formatCurrency(calculateVAFundingFee(baseLoanAmount, loanPurpose === 'purchase' ? (propertyDetails.downPaymentPercent || 0) : 0, true, vaIsIRRRL))}
+                          {vaIsIRRRL && ' (IRRRL 0.5%)'}
                           {vaFundingFeeFinanced ? ' (Added to loan)' : ' (Section B)'}
                         </div>
                       </>
@@ -3057,6 +3089,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                         // Include FHA/VA fee settings
                         vaFundingFeeExempt,
                         vaFundingFeeFinanced,
+                        vaIsIRRRL,
                         fhaMIPFinanced,
                         calculations: detailedCalcs
                       });
@@ -3453,41 +3486,100 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                 marginBottom: '24px',
                 border: '1px solid #7B2CBF30'
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ fontSize: '14px', fontWeight: '600', color: '#7B2CBF', marginBottom: '4px' }}>
-                      Loan Officer Compensation
-                    </h3>
-                    <p style={{ fontSize: '12px', color: '#666' }}>
-                      Your comp % is deducted from lender credit or added to borrower's points
-                    </p>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input
-                      type="number"
-                      step="0.125"
-                      min="0"
-                      max="5"
-                      value={loCompensation}
-                      onChange={(e) => setLoCompensation(parseFloat(e.target.value) || 0)}
-                      style={{ 
-                        width: '80px', 
-                        padding: '10px 12px', 
-                        fontSize: '16px', 
-                        fontWeight: '600',
-                        textAlign: 'center',
-                        borderRadius: '8px',
-                        border: '2px solid #7B2CBF',
-                        background: 'white'
-                      }}
-                    />
-                    <span style={{ fontSize: '16px', fontWeight: '600', color: '#7B2CBF' }}>%</span>
-                  </div>
+                <h3 style={{ fontSize: '14px', fontWeight: '600', color: '#7B2CBF', marginBottom: '12px' }}>
+                  Loan Officer Compensation
+                </h3>
+                <p style={{ fontSize: '12px', color: '#666', marginBottom: '16px' }}>
+                  Enter percentage and/or flat dollar amount. Comp is deducted from lender credit or added to borrower's points.
+                </p>
+                
+                {/* Percentage Input */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: '500', minWidth: '100px' }}>Percentage:</label>
+                  <input
+                    type="number"
+                    step="0.125"
+                    min="0"
+                    max="5"
+                    value={loCompensation}
+                    onChange={(e) => setLoCompensation(parseFloat(e.target.value) || 0)}
+                    style={{ 
+                      width: '80px', 
+                      padding: '10px 12px', 
+                      fontSize: '16px', 
+                      fontWeight: '600',
+                      textAlign: 'center',
+                      borderRadius: '8px',
+                      border: '2px solid #7B2CBF',
+                      background: 'white'
+                    }}
+                  />
+                  <span style={{ fontSize: '16px', fontWeight: '600', color: '#7B2CBF' }}>%</span>
+                  {loCompensation > 0 && (
+                    <span style={{ fontSize: '13px', color: '#666' }}>
+                      = {formatCurrency(baseLoanAmount * loCompensation / 100)}
+                    </span>
+                  )}
                 </div>
-                {loCompensation > 0 && (
-                  <div style={{ marginTop: '12px', padding: '10px 12px', background: 'white', borderRadius: '8px', fontSize: '12px' }}>
-                    <strong>Example:</strong> If price = 102, you take {loCompensation}%, borrower gets {(2 - loCompensation).toFixed(3)}% credit
-                    {2 - loCompensation < 0 && <span style={{ color: '#dc2626' }}> (borrower pays {Math.abs(2 - loCompensation).toFixed(3)}% points)</span>}
+                
+                {/* Dollar Amount Input */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: '500', minWidth: '100px' }}>Flat Amount:</label>
+                  <span style={{ fontSize: '16px', fontWeight: '600', color: '#7B2CBF' }}>$</span>
+                  <input
+                    type="number"
+                    step="100"
+                    min="0"
+                    value={loCompensationDollar}
+                    onChange={(e) => setLoCompensationDollar(parseFloat(e.target.value) || 0)}
+                    style={{ 
+                      width: '110px', 
+                      padding: '10px 12px', 
+                      fontSize: '16px', 
+                      fontWeight: '600',
+                      textAlign: 'center',
+                      borderRadius: '8px',
+                      border: '2px solid #7B2CBF',
+                      background: 'white'
+                    }}
+                  />
+                </div>
+                
+                {/* Calculated Total */}
+                {(loCompensation > 0 || loCompensationDollar > 0) && (
+                  <div style={{ 
+                    background: 'white', 
+                    borderRadius: '8px', 
+                    padding: '16px',
+                    border: '2px solid #7B2CBF'
+                  }}>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Your Compensation on {formatCurrency(baseLoanAmount)} Loan
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {loCompensation > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+                          <span>{loCompensation}% of loan:</span>
+                          <span style={{ fontWeight: '600' }}>{formatCurrency(baseLoanAmount * loCompensation / 100)}</span>
+                        </div>
+                      )}
+                      {loCompensationDollar > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+                          <span>Flat amount:</span>
+                          <span style={{ fontWeight: '600' }}>{formatCurrency(loCompensationDollar)}</span>
+                        </div>
+                      )}
+                      {loCompensation > 0 && loCompensationDollar > 0 && (
+                        <div style={{ borderTop: '1px solid #e0e0e0', marginTop: '8px', paddingTop: '8px' }} />
+                      )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: '700', color: '#7B2CBF' }}>
+                        <span>Total Compensation:</span>
+                        <span>{formatCurrency((baseLoanAmount * loCompensation / 100) + loCompensationDollar)}</span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#888', marginTop: '4px' }}>
+                        Effective rate: {(((baseLoanAmount * loCompensation / 100) + loCompensationDollar) / baseLoanAmount * 100).toFixed(3)}% of loan amount
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -4191,41 +4283,100 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                     marginBottom: '24px',
                     border: '1px solid #7B2CBF30'
                   }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <h3 style={{ fontSize: '14px', fontWeight: '600', color: '#7B2CBF', marginBottom: '4px' }}>
-                          Loan Officer Compensation
-                        </h3>
-                        <p style={{ fontSize: '12px', color: '#666' }}>
-                          Your comp % is deducted from lender credit or added to borrower's points
-                        </p>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <input
-                          type="number"
-                          step="0.125"
-                          min="0"
-                          max="5"
-                          value={loCompensationHE}
-                          onChange={(e) => setLoCompensationHE(parseFloat(e.target.value) || 0)}
-                          style={{ 
-                            width: '80px', 
-                            padding: '10px 12px', 
-                            fontSize: '16px', 
-                            fontWeight: '600',
-                            textAlign: 'center',
-                            borderRadius: '8px',
-                            border: '2px solid #7B2CBF',
-                            background: 'white'
-                          }}
-                        />
-                        <span style={{ fontSize: '16px', fontWeight: '600', color: '#7B2CBF' }}>%</span>
-                      </div>
+                    <h3 style={{ fontSize: '14px', fontWeight: '600', color: '#7B2CBF', marginBottom: '12px' }}>
+                      Loan Officer Compensation
+                    </h3>
+                    <p style={{ fontSize: '12px', color: '#666', marginBottom: '16px' }}>
+                      Enter percentage and/or flat dollar amount. Comp is deducted from lender credit or added to borrower's points.
+                    </p>
+                    
+                    {/* Percentage Input */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                      <label style={{ fontSize: '13px', fontWeight: '500', minWidth: '100px' }}>Percentage:</label>
+                      <input
+                        type="number"
+                        step="0.125"
+                        min="0"
+                        max="5"
+                        value={loCompensationHE}
+                        onChange={(e) => setLoCompensationHE(parseFloat(e.target.value) || 0)}
+                        style={{ 
+                          width: '80px', 
+                          padding: '10px 12px', 
+                          fontSize: '16px', 
+                          fontWeight: '600',
+                          textAlign: 'center',
+                          borderRadius: '8px',
+                          border: '2px solid #7B2CBF',
+                          background: 'white'
+                        }}
+                      />
+                      <span style={{ fontSize: '16px', fontWeight: '600', color: '#7B2CBF' }}>%</span>
+                      {loCompensationHE > 0 && (
+                        <span style={{ fontSize: '13px', color: '#666' }}>
+                          = {formatCurrency(secondMortgageDetails.lineAmount * loCompensationHE / 100)}
+                        </span>
+                      )}
                     </div>
-                    {loCompensationHE > 0 && (
-                      <div style={{ marginTop: '12px', padding: '10px 12px', background: 'white', borderRadius: '8px', fontSize: '12px' }}>
-                        <strong>Example:</strong> If price = 102, you take {loCompensationHE}%, borrower gets {(2 - loCompensationHE).toFixed(3)}% credit
-                        {2 - loCompensationHE < 0 && <span style={{ color: '#dc2626' }}> (borrower pays {Math.abs(2 - loCompensationHE).toFixed(3)}% points)</span>}
+                    
+                    {/* Dollar Amount Input */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                      <label style={{ fontSize: '13px', fontWeight: '500', minWidth: '100px' }}>Flat Amount:</label>
+                      <span style={{ fontSize: '16px', fontWeight: '600', color: '#7B2CBF' }}>$</span>
+                      <input
+                        type="number"
+                        step="100"
+                        min="0"
+                        value={loCompensationDollarHE}
+                        onChange={(e) => setLoCompensationDollarHE(parseFloat(e.target.value) || 0)}
+                        style={{ 
+                          width: '110px', 
+                          padding: '10px 12px', 
+                          fontSize: '16px', 
+                          fontWeight: '600',
+                          textAlign: 'center',
+                          borderRadius: '8px',
+                          border: '2px solid #7B2CBF',
+                          background: 'white'
+                        }}
+                      />
+                    </div>
+                    
+                    {/* Calculated Total */}
+                    {(loCompensationHE > 0 || loCompensationDollarHE > 0) && (
+                      <div style={{ 
+                        background: 'white', 
+                        borderRadius: '8px', 
+                        padding: '16px',
+                        border: '2px solid #7B2CBF'
+                      }}>
+                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          Your Compensation on {formatCurrency(secondMortgageDetails.lineAmount)} {secondMortgageType === 'heloc' ? 'Line' : 'Loan'}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {loCompensationHE > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+                              <span>{loCompensationHE}% of {secondMortgageType === 'heloc' ? 'line' : 'loan'}:</span>
+                              <span style={{ fontWeight: '600' }}>{formatCurrency(secondMortgageDetails.lineAmount * loCompensationHE / 100)}</span>
+                            </div>
+                          )}
+                          {loCompensationDollarHE > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+                              <span>Flat amount:</span>
+                              <span style={{ fontWeight: '600' }}>{formatCurrency(loCompensationDollarHE)}</span>
+                            </div>
+                          )}
+                          {loCompensationHE > 0 && loCompensationDollarHE > 0 && (
+                            <div style={{ borderTop: '1px solid #e0e0e0', marginTop: '8px', paddingTop: '8px' }} />
+                          )}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: '700', color: '#7B2CBF' }}>
+                            <span>Total Compensation:</span>
+                            <span>{formatCurrency((secondMortgageDetails.lineAmount * loCompensationHE / 100) + loCompensationDollarHE)}</span>
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#888', marginTop: '4px' }}>
+                            Effective rate: {(((secondMortgageDetails.lineAmount * loCompensationHE / 100) + loCompensationDollarHE) / secondMortgageDetails.lineAmount * 100).toFixed(3)}% of {secondMortgageType === 'heloc' ? 'line' : 'loan'} amount
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
