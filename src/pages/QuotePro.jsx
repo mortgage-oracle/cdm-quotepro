@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnreadNotifications, getAllNotifications, subscribeToNotifications, markNotificationRead, markNotificationReviewed, updateLoanOfficerProfile, updateLoanOfficerByEmail, saveFeeTemplates, saveStateLookupTables } from '../supabaseClient';
+import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnreadNotifications, getAllNotifications, subscribeToNotifications, markNotificationRead, markNotificationReviewed, updateLoanOfficerProfile, updateLoanOfficerByEmail, saveFeeTemplates, saveStateLookupTables, updateLastActivity, getAdminDashboardStats, getLeaderboardData, getAllLoanOfficersAdmin, toggleLoanOfficerStatus, exportLoanOfficersToCSV, downloadCSV } from '../supabaseClient';
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V29
+// CDM QUOTE PRO - Main Application V30
 // ============================================================================
 
 // ============================================================================
@@ -777,6 +777,15 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
   const [loadingAllNotifications, setLoadingAllNotifications] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   
+  // Admin Dashboard & Leaderboard
+  const [adminStats, setAdminStats] = useState(null);
+  const [leaderboardData, setLeaderboardData] = useState([]);
+  const [allLoanOfficers, setAllLoanOfficers] = useState([]);
+  const [loadingAdminData, setLoadingAdminData] = useState(false);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
+  const isAdmin = loanOfficer?.role === 'admin';
+  const isDeactivated = loanOfficer?.is_active === false;
+  
   // Database quotes
   const [dbQuotes, setDbQuotes] = useState([]);
   const [loadingQuotes, setLoadingQuotes] = useState(false);
@@ -1227,6 +1236,88 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
       setVaIsIRRRL(false);
     }
   }, [loanPurpose, loanProgram]);
+  
+  // Track user activity on mount and tab changes
+  useEffect(() => {
+    if (loanOfficer?.id) {
+      updateLastActivity(loanOfficer.id);
+    }
+  }, [loanOfficer?.id, activeTab]);
+  
+  // Load leaderboard data when on leaderboard tab
+  useEffect(() => {
+    if (activeTab === 'leaderboard') {
+      loadLeaderboard();
+    }
+  }, [activeTab]);
+  
+  // Load admin dashboard data when admin accesses admin tab
+  useEffect(() => {
+    if (activeTab === 'admin' && isAdmin) {
+      loadAdminDashboard();
+    }
+  }, [activeTab, isAdmin]);
+  
+  // Load leaderboard data
+  const loadLeaderboard = async () => {
+    setLoadingLeaderboard(true);
+    try {
+      const { data, error } = await getLeaderboardData();
+      if (error) throw error;
+      setLeaderboardData(data || []);
+    } catch (err) {
+      console.error('Error loading leaderboard:', err);
+    } finally {
+      setLoadingLeaderboard(false);
+    }
+  };
+  
+  // Load admin dashboard data
+  const loadAdminDashboard = async () => {
+    setLoadingAdminData(true);
+    try {
+      // Load stats and all LOs in parallel
+      const [statsResult, losResult] = await Promise.all([
+        getAdminDashboardStats(),
+        getAllLoanOfficersAdmin()
+      ]);
+      
+      if (statsResult.data) setAdminStats(statsResult.data);
+      if (losResult.data) setAllLoanOfficers(losResult.data);
+    } catch (err) {
+      console.error('Error loading admin data:', err);
+    } finally {
+      setLoadingAdminData(false);
+    }
+  };
+  
+  // Handle LO status toggle (activate/deactivate)
+  const handleToggleLOStatus = async (loId, currentStatus) => {
+    const newStatus = !currentStatus;
+    const action = newStatus ? 'activate' : 'deactivate';
+    
+    if (!confirm(`Are you sure you want to ${action} this loan officer?`)) {
+      return;
+    }
+    
+    try {
+      const { error } = await toggleLoanOfficerStatus(loId, newStatus);
+      if (error) throw error;
+      
+      // Refresh the list
+      loadAdminDashboard();
+    } catch (err) {
+      console.error('Error toggling LO status:', err);
+      alert('Failed to update status. Please try again.');
+    }
+  };
+  
+  // Export LO data to CSV
+  const handleExportCSV = () => {
+    const csv = exportLoanOfficersToCSV(allLoanOfficers);
+    const filename = `loan_officers_${new Date().toISOString().split('T')[0]}.csv`;
+    downloadCSV(csv, filename);
+  };
   
   // Share quote handler
   const handleShareQuote = async (quoteData) => {
@@ -2134,6 +2225,69 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
         shareUrl={shareUrl}
       />
 
+      {/* Deactivated Account Overlay */}
+      {isDeactivated && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.9)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '16px',
+            padding: '48px',
+            maxWidth: '500px',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '64px', marginBottom: '24px' }}>🚫</div>
+            <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '16px', color: '#1a1a1a' }}>
+              Account Deactivated
+            </h1>
+            <p style={{ fontSize: '16px', color: '#666', marginBottom: '32px', lineHeight: '1.6' }}>
+              Your CDM Quote Pro account has been deactivated. Please contact your administrator to restore access.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <a 
+                href="mailto:ramon@clientdirectmtg.com?subject=CDM Quote Pro - Account Reactivation Request"
+                style={{
+                  background: '#7B2CBF',
+                  color: 'white',
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  textDecoration: 'none',
+                  fontWeight: '600',
+                  fontSize: '14px'
+                }}
+              >
+                Contact Admin
+              </a>
+              <button
+                onClick={onSignOut}
+                style={{
+                  background: '#f0f0f0',
+                  color: '#333',
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  cursor: 'pointer'
+                }}
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header style={{
         background: '#1a1a1a',
@@ -2181,7 +2335,8 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
             { id: 'income', label: 'Income' },
             { id: 'saved', label: 'Saved' },
             { id: 'notifications', label: '🔔 Activity' },
-            { id: 'admin', label: '⚙ Admin' }
+            { id: 'leaderboard', label: '🏆 Leaderboard' },
+            ...(isAdmin ? [{ id: 'admin', label: '⚙ Admin' }] : [])
           ].map(tab => (
             <button
               key={tab.id}
@@ -5206,10 +5361,488 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
         )}
 
         {/* ================================================================ */}
-        {/* ADMIN TAB - Fee Templates */}
+        {/* LEADERBOARD TAB */}
+        {/* ================================================================ */}
+        {activeTab === 'leaderboard' && (
+          <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+            <div className="card" style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <div>
+                  <h2 style={{ fontSize: '28px', fontWeight: '700' }}>🏆 Leaderboard</h2>
+                  <p style={{ color: '#666', marginTop: '4px' }}>See how you stack up against your peers</p>
+                </div>
+                <button 
+                  onClick={loadLeaderboard}
+                  className="btn-secondary"
+                  disabled={loadingLeaderboard}
+                >
+                  {loadingLeaderboard ? 'Loading...' : '↻ Refresh'}
+                </button>
+              </div>
+              
+              {loadingLeaderboard ? (
+                <div style={{ textAlign: 'center', padding: '60px', color: '#666' }}>
+                  Loading leaderboard...
+                </div>
+              ) : (
+                <>
+                  {/* Your Stats Card */}
+                  {loanOfficer && (
+                    <div style={{ 
+                      background: 'linear-gradient(135deg, #7B2CBF 0%, #9D4EDD 100%)',
+                      borderRadius: '12px',
+                      padding: '24px',
+                      marginBottom: '24px',
+                      color: 'white'
+                    }}>
+                      <h3 style={{ fontSize: '14px', opacity: 0.8, marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                        Your Performance
+                      </h3>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '24px' }}>
+                        {(() => {
+                          const myStats = leaderboardData.find(lo => lo.email === loanOfficer.email);
+                          const myRank = leaderboardData.findIndex(lo => lo.email === loanOfficer.email) + 1;
+                          return (
+                            <>
+                              <div>
+                                <div style={{ fontSize: '36px', fontWeight: '700' }}>#{myRank || '-'}</div>
+                                <div style={{ fontSize: '12px', opacity: 0.8 }}>Your Rank</div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: '36px', fontWeight: '700' }}>{myStats?.total_quotes || 0}</div>
+                                <div style={{ fontSize: '12px', opacity: 0.8 }}>Total Quotes</div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: '36px', fontWeight: '700' }}>{myStats?.quotes_this_month || 0}</div>
+                                <div style={{ fontSize: '12px', opacity: 0.8 }}>This Month</div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: '36px', fontWeight: '700' }}>{myStats?.total_views || 0}</div>
+                                <div style={{ fontSize: '12px', opacity: 0.8 }}>Views</div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: '36px', fontWeight: '700' }}>{myStats?.view_rate_percent || 0}%</div>
+                                <div style={{ fontSize: '12px', opacity: 0.8 }}>View Rate</div>
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Leaderboard Tables */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                    {/* All-Time Leaders */}
+                    <div style={{ background: '#f8f8f8', borderRadius: '12px', padding: '20px' }}>
+                      <h3 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        🥇 All-Time Leaders
+                      </h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {leaderboardData.slice(0, 10).map((lo, i) => (
+                          <div 
+                            key={lo.id} 
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '12px',
+                              padding: '12px',
+                              background: lo.email === loanOfficer?.email ? '#7B2CBF15' : 'white',
+                              borderRadius: '8px',
+                              border: lo.email === loanOfficer?.email ? '2px solid #7B2CBF' : '1px solid #eee'
+                            }}
+                          >
+                            <div style={{ 
+                              width: '28px', 
+                              height: '28px', 
+                              borderRadius: '50%', 
+                              background: i < 3 ? ['#FFD700', '#C0C0C0', '#CD7F32'][i] : '#e0e0e0',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: '700',
+                              fontSize: '12px',
+                              color: i < 3 ? '#333' : '#666'
+                            }}>
+                              {i + 1}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: '600', fontSize: '14px' }}>{lo.full_name || lo.email}</div>
+                              {lo.is_online && <span style={{ fontSize: '10px', color: '#22c55e' }}>● Online</span>}
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontWeight: '700', color: '#7B2CBF' }}>{lo.total_quotes}</div>
+                              <div style={{ fontSize: '10px', color: '#888' }}>quotes</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    {/* This Month's Leaders */}
+                    <div style={{ background: '#f8f8f8', borderRadius: '12px', padding: '20px' }}>
+                      <h3 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        📅 This Month
+                      </h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {[...leaderboardData]
+                          .sort((a, b) => (b.quotes_this_month || 0) - (a.quotes_this_month || 0))
+                          .slice(0, 10)
+                          .map((lo, i) => (
+                          <div 
+                            key={lo.id} 
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '12px',
+                              padding: '12px',
+                              background: lo.email === loanOfficer?.email ? '#7B2CBF15' : 'white',
+                              borderRadius: '8px',
+                              border: lo.email === loanOfficer?.email ? '2px solid #7B2CBF' : '1px solid #eee'
+                            }}
+                          >
+                            <div style={{ 
+                              width: '28px', 
+                              height: '28px', 
+                              borderRadius: '50%', 
+                              background: i < 3 ? ['#FFD700', '#C0C0C0', '#CD7F32'][i] : '#e0e0e0',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: '700',
+                              fontSize: '12px',
+                              color: i < 3 ? '#333' : '#666'
+                            }}>
+                              {i + 1}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: '600', fontSize: '14px' }}>{lo.full_name || lo.email}</div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontWeight: '700', color: '#7B2CBF' }}>{lo.quotes_this_month || 0}</div>
+                              <div style={{ fontSize: '10px', color: '#888' }}>this month</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    {/* Best Engagement */}
+                    <div style={{ background: '#f8f8f8', borderRadius: '12px', padding: '20px' }}>
+                      <h3 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        👀 Best Engagement
+                      </h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {[...leaderboardData]
+                          .filter(lo => lo.quotes_shared > 0)
+                          .sort((a, b) => (b.view_rate_percent || 0) - (a.view_rate_percent || 0))
+                          .slice(0, 10)
+                          .map((lo, i) => (
+                          <div 
+                            key={lo.id} 
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '12px',
+                              padding: '12px',
+                              background: lo.email === loanOfficer?.email ? '#7B2CBF15' : 'white',
+                              borderRadius: '8px',
+                              border: lo.email === loanOfficer?.email ? '2px solid #7B2CBF' : '1px solid #eee'
+                            }}
+                          >
+                            <div style={{ 
+                              width: '28px', 
+                              height: '28px', 
+                              borderRadius: '50%', 
+                              background: i < 3 ? ['#FFD700', '#C0C0C0', '#CD7F32'][i] : '#e0e0e0',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: '700',
+                              fontSize: '12px',
+                              color: i < 3 ? '#333' : '#666'
+                            }}>
+                              {i + 1}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: '600', fontSize: '14px' }}>{lo.full_name || lo.email}</div>
+                              <div style={{ fontSize: '11px', color: '#888' }}>{lo.total_views} views / {lo.quotes_shared} shared</div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontWeight: '700', color: '#22c55e' }}>{lo.view_rate_percent}%</div>
+                              <div style={{ fontSize: '10px', color: '#888' }}>view rate</div>
+                            </div>
+                          </div>
+                        ))}
+                        {leaderboardData.filter(lo => lo.quotes_shared > 0).length === 0 && (
+                          <div style={{ textAlign: 'center', padding: '20px', color: '#888' }}>
+                            No shared quotes yet
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Top Converters */}
+                    <div style={{ background: '#f8f8f8', borderRadius: '12px', padding: '20px' }}>
+                      <h3 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        🎯 Top Converters
+                      </h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {[...leaderboardData]
+                          .filter(lo => lo.apply_clicks > 0)
+                          .sort((a, b) => (b.apply_clicks || 0) - (a.apply_clicks || 0))
+                          .slice(0, 10)
+                          .map((lo, i) => (
+                          <div 
+                            key={lo.id} 
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '12px',
+                              padding: '12px',
+                              background: lo.email === loanOfficer?.email ? '#7B2CBF15' : 'white',
+                              borderRadius: '8px',
+                              border: lo.email === loanOfficer?.email ? '2px solid #7B2CBF' : '1px solid #eee'
+                            }}
+                          >
+                            <div style={{ 
+                              width: '28px', 
+                              height: '28px', 
+                              borderRadius: '50%', 
+                              background: i < 3 ? ['#FFD700', '#C0C0C0', '#CD7F32'][i] : '#e0e0e0',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: '700',
+                              fontSize: '12px',
+                              color: i < 3 ? '#333' : '#666'
+                            }}>
+                              {i + 1}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: '600', fontSize: '14px' }}>{lo.full_name || lo.email}</div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontWeight: '700', color: '#7B2CBF' }}>{lo.apply_clicks}</div>
+                              <div style={{ fontSize: '10px', color: '#888' }}>apply clicks</div>
+                            </div>
+                          </div>
+                        ))}
+                        {leaderboardData.filter(lo => lo.apply_clicks > 0).length === 0 && (
+                          <div style={{ textAlign: 'center', padding: '20px', color: '#888' }}>
+                            No apply clicks yet
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ================================================================ */}
+        {/* ADMIN TAB - Dashboard & Settings */}
         {/* ================================================================ */}
         {activeTab === 'admin' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+          <div>
+            {/* Admin Dashboard Section */}
+            <div className="card" style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                <div>
+                  <h2 style={{ fontSize: '28px', fontWeight: '700' }}>📊 Admin Dashboard</h2>
+                  <p style={{ color: '#666', marginTop: '4px' }}>System overview and user management</p>
+                </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button 
+                    onClick={handleExportCSV}
+                    className="btn-secondary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    📥 Export CSV
+                  </button>
+                  <button 
+                    onClick={loadAdminDashboard}
+                    className="btn-secondary"
+                    disabled={loadingAdminData}
+                  >
+                    {loadingAdminData ? 'Loading...' : '↻ Refresh'}
+                  </button>
+                </div>
+              </div>
+              
+              {loadingAdminData && !adminStats ? (
+                <div style={{ textAlign: 'center', padding: '60px', color: '#666' }}>
+                  Loading dashboard data...
+                </div>
+              ) : (
+                <>
+                  {/* Summary Cards */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '16px', marginBottom: '24px' }}>
+                    <div style={{ background: '#f8f8f8', borderRadius: '12px', padding: '20px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '32px', fontWeight: '700', color: '#7B2CBF' }}>
+                        {adminStats?.total_loan_officers || 0}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>Total LOs</div>
+                    </div>
+                    <div style={{ background: 'linear-gradient(135deg, #22c55e20 0%, #16a34a20 100%)', borderRadius: '12px', padding: '20px', textAlign: 'center', border: '1px solid #22c55e40' }}>
+                      <div style={{ fontSize: '32px', fontWeight: '700', color: '#22c55e' }}>
+                        {adminStats?.online_now || 0}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>🟢 Online Now</div>
+                    </div>
+                    <div style={{ background: '#f8f8f8', borderRadius: '12px', padding: '20px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '32px', fontWeight: '700', color: '#7B2CBF' }}>
+                        {adminStats?.total_quotes || 0}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>Total Quotes</div>
+                    </div>
+                    <div style={{ background: '#f8f8f8', borderRadius: '12px', padding: '20px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '32px', fontWeight: '700', color: '#7B2CBF' }}>
+                        {adminStats?.total_shared || 0}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>Quotes Shared</div>
+                    </div>
+                    <div style={{ background: '#f8f8f8', borderRadius: '12px', padding: '20px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '32px', fontWeight: '700', color: '#7B2CBF' }}>
+                        {adminStats?.total_views || 0}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>Views</div>
+                    </div>
+                    <div style={{ background: '#f8f8f8', borderRadius: '12px', padding: '20px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '32px', fontWeight: '700', color: '#7B2CBF' }}>
+                        {adminStats?.adoption_rate_percent || 0}%
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>Adoption Rate</div>
+                    </div>
+                  </div>
+                  
+                  {/* Activity Metrics Row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
+                    <div style={{ background: '#7B2CBF10', borderRadius: '12px', padding: '16px', border: '1px solid #7B2CBF30' }}>
+                      <div style={{ fontSize: '11px', color: '#666', textTransform: 'uppercase', marginBottom: '8px' }}>Quotes Today</div>
+                      <div style={{ fontSize: '24px', fontWeight: '700', color: '#7B2CBF' }}>{adminStats?.quotes_today || 0}</div>
+                    </div>
+                    <div style={{ background: '#7B2CBF10', borderRadius: '12px', padding: '16px', border: '1px solid #7B2CBF30' }}>
+                      <div style={{ fontSize: '11px', color: '#666', textTransform: 'uppercase', marginBottom: '8px' }}>Quotes This Week</div>
+                      <div style={{ fontSize: '24px', fontWeight: '700', color: '#7B2CBF' }}>{adminStats?.quotes_this_week || 0}</div>
+                    </div>
+                    <div style={{ background: '#7B2CBF10', borderRadius: '12px', padding: '16px', border: '1px solid #7B2CBF30' }}>
+                      <div style={{ fontSize: '11px', color: '#666', textTransform: 'uppercase', marginBottom: '8px' }}>Quotes This Month</div>
+                      <div style={{ fontSize: '24px', fontWeight: '700', color: '#7B2CBF' }}>{adminStats?.quotes_this_month || 0}</div>
+                    </div>
+                    <div style={{ background: '#22c55e10', borderRadius: '12px', padding: '16px', border: '1px solid #22c55e30' }}>
+                      <div style={{ fontSize: '11px', color: '#666', textTransform: 'uppercase', marginBottom: '8px' }}>Weekly Active Users</div>
+                      <div style={{ fontSize: '24px', fontWeight: '700', color: '#22c55e' }}>{adminStats?.weekly_active_users || 0}</div>
+                    </div>
+                  </div>
+                  
+                  {/* Loan Officer Management Table */}
+                  <div style={{ background: '#f8f8f8', borderRadius: '12px', padding: '20px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '16px' }}>
+                      👥 Loan Officer Management
+                    </h3>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '2px solid #ddd' }}>
+                            <th style={{ textAlign: 'left', padding: '12px 8px', fontWeight: '600' }}>Name</th>
+                            <th style={{ textAlign: 'left', padding: '12px 8px', fontWeight: '600' }}>Email</th>
+                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600' }}>Status</th>
+                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600' }}>Account</th>
+                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600' }}>Quotes</th>
+                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600' }}>Shared</th>
+                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600' }}>Views</th>
+                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600' }}>Apply</th>
+                            <th style={{ textAlign: 'left', padding: '12px 8px', fontWeight: '600' }}>Last Active</th>
+                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600' }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {allLoanOfficers.map((lo) => (
+                            <tr 
+                              key={lo.id} 
+                              style={{ 
+                                borderBottom: '1px solid #eee',
+                                background: !lo.is_active ? '#fee2e2' : (lo.email === loanOfficer?.email ? '#7B2CBF10' : 'white')
+                              }}
+                            >
+                              <td style={{ padding: '12px 8px' }}>
+                                <div style={{ fontWeight: '600' }}>{lo.full_name || '-'}</div>
+                                {lo.nmls_number && <div style={{ fontSize: '11px', color: '#888' }}>NMLS# {lo.nmls_number}</div>}
+                              </td>
+                              <td style={{ padding: '12px 8px', color: '#666' }}>{lo.email}</td>
+                              <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                                {lo.is_online ? (
+                                  <span style={{ color: '#22c55e', fontWeight: '600' }}>🟢 Online</span>
+                                ) : (
+                                  <span style={{ color: '#888' }}>⚪ Offline</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                                {lo.is_active ? (
+                                  <span style={{ background: '#22c55e20', color: '#16a34a', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '600' }}>Active</span>
+                                ) : (
+                                  <span style={{ background: '#ef444420', color: '#dc2626', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '600' }}>Deactivated</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '12px 8px', textAlign: 'center', fontWeight: '600' }}>{lo.total_quotes || 0}</td>
+                              <td style={{ padding: '12px 8px', textAlign: 'center' }}>{lo.quotes_shared || 0}</td>
+                              <td style={{ padding: '12px 8px', textAlign: 'center' }}>{lo.total_views || 0}</td>
+                              <td style={{ padding: '12px 8px', textAlign: 'center' }}>{lo.apply_clicks || 0}</td>
+                              <td style={{ padding: '12px 8px', color: '#666', fontSize: '12px' }}>
+                                {lo.last_activity ? (
+                                  (() => {
+                                    const diff = Date.now() - new Date(lo.last_activity).getTime();
+                                    const mins = Math.floor(diff / 60000);
+                                    const hours = Math.floor(diff / 3600000);
+                                    const days = Math.floor(diff / 86400000);
+                                    if (mins < 60) return `${mins} min ago`;
+                                    if (hours < 24) return `${hours} hr ago`;
+                                    return `${days} days ago`;
+                                  })()
+                                ) : 'Never'}
+                              </td>
+                              <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                                {lo.email !== loanOfficer?.email && (
+                                  <button
+                                    onClick={() => handleToggleLOStatus(lo.id, lo.is_active)}
+                                    style={{
+                                      background: lo.is_active ? '#fee2e2' : '#dcfce7',
+                                      color: lo.is_active ? '#dc2626' : '#16a34a',
+                                      border: 'none',
+                                      padding: '6px 12px',
+                                      borderRadius: '6px',
+                                      fontSize: '11px',
+                                      fontWeight: '600',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    {lo.is_active ? 'Deactivate' : 'Activate'}
+                                  </button>
+                                )}
+                                {lo.email === loanOfficer?.email && (
+                                  <span style={{ color: '#888', fontSize: '11px' }}>You</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {allLoanOfficers.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
+                        No loan officers found
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+            
+            {/* Profile & Settings Section */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
             {/* Left Column - Profile + Default Fees */}
             <div>
               {/* LO Profile Section */}
@@ -5845,6 +6478,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                 </div>
               </div>
             </div>
+          </div>
           </div>
         )}
       </main>
