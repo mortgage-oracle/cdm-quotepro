@@ -3,7 +3,7 @@ import { saveQuote, getQuotesForLO, deleteQuote, getShareableQuoteUrl, getUnread
 import ShareQuoteModal from '../components/ShareQuoteModal';
 
 // ============================================================================
-// CDM QUOTE PRO - Main Application V30
+// CDM QUOTE PRO - Main Application V31
 // ============================================================================
 
 // ============================================================================
@@ -946,6 +946,10 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
   const [pmiRates, setPmiRates] = useState({ ...defaultPmiRates });
   const [baseTitleFees, setBaseTitleFees] = useState({ ...defaultBaseTitleFees });
   
+  // Monthly escrow overrides (null = use calculated, number = override)
+  const [monthlyTaxOverride, setMonthlyTaxOverride] = useState(null);
+  const [monthlyHOIOverride, setMonthlyHOIOverride] = useState(null);
+  
   // State lookup tables persistence
   const [savingStateTables, setSavingStateTables] = useState(false);
   const [stateTablesLoaded, setStateTablesLoaded] = useState(false);
@@ -1409,6 +1413,9 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
       setCreditScore(740);
       setRateType('fixed');
       setRecommendedQuote(null);
+      // Reset monthly escrow overrides
+      setMonthlyTaxOverride(null);
+      setMonthlyHOIOverride(null);
       // Reset Home Equity too
       setSecondMortgageDetails({
         firstMortgageBalance: 350000,
@@ -1610,9 +1617,11 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
   // LTV
   const baseLTV = baseLoanAmount / propertyValue;
 
-  // Monthly escrow components (using state-based rates)
-  const monthlyTax = calculateMonthlyTax(propertyValue, clientInfo.state, propertyTaxRates);
-  const monthlyHOI = calculateMonthlyHOI(propertyValue);
+  // Monthly escrow components (using state-based rates, with optional overrides)
+  const calculatedMonthlyTax = calculateMonthlyTax(propertyValue, clientInfo.state, propertyTaxRates);
+  const calculatedMonthlyHOI = calculateMonthlyHOI(propertyValue);
+  const monthlyTax = monthlyTaxOverride !== null ? monthlyTaxOverride : calculatedMonthlyTax;
+  const monthlyHOI = monthlyHOIOverride !== null ? monthlyHOIOverride : calculatedMonthlyHOI;
   const monthlyEscrow = monthlyTax + monthlyHOI;
 
   // Title fees (using state-based rates)
@@ -2194,6 +2203,9 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
       if (data.vaFundingFeeFinanced !== undefined) setVaFundingFeeFinanced(data.vaFundingFeeFinanced);
       if (data.vaIsIRRRL !== undefined) setVaIsIRRRL(data.vaIsIRRRL);
       if (data.fhaMIPFinanced !== undefined) setFhaMIPFinanced(data.fhaMIPFinanced);
+      // Monthly escrow overrides
+      if (data.monthlyTaxOverride !== undefined) setMonthlyTaxOverride(data.monthlyTaxOverride);
+      if (data.monthlyHOIOverride !== undefined) setMonthlyHOIOverride(data.monthlyHOIOverride);
       if (data.rateType) setRateType(data.rateType);
       if (data.armConfig) setArmConfig(data.armConfig);
       if (data.propertyDetails) setPropertyDetails(data.propertyDetails);
@@ -3039,21 +3051,160 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                 </div>
               </div>
               
-              {/* Monthly Escrow Breakdown */}
+              {/* Monthly Escrow Breakdown - Editable */}
               <div className="card animate-in" style={{ animationDelay: '0.3s' }}>
                 <h3 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '16px' }}>Monthly Escrow</h3>
-                <div className="cost-breakdown" style={{ background: 'transparent', padding: 0 }}>
-                  <div className="cost-line">
-                    <span className="label">Property Taxes</span>
-                    <span className="value">{formatCurrency(monthlyTax)}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {/* Property Taxes */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <label className="label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        Property Taxes
+                        {monthlyTaxOverride !== null && (
+                          <span style={{ 
+                            width: '8px', 
+                            height: '8px', 
+                            borderRadius: '50%', 
+                            background: '#7B2CBF',
+                            display: 'inline-block'
+                          }} title="Manual override" />
+                        )}
+                      </label>
+                      {monthlyTaxOverride !== null && (
+                        <button 
+                          onClick={() => setMonthlyTaxOverride(null)}
+                          style={{ 
+                            fontSize: '10px', 
+                            padding: '2px 6px', 
+                            background: 'none', 
+                            border: '1px solid #ccc', 
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            color: '#666'
+                          }}
+                          title={`Reset to calculated: ${formatCurrency(calculatedMonthlyTax)}`}
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#666', fontSize: '13px' }}>$</span>
+                      <input 
+                        type="text"
+                        value={monthlyTaxOverride !== null 
+                          ? monthlyTaxOverride.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+                          : calculatedMonthlyTax.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+                        }
+                        onChange={(e) => {
+                          const value = parseFloat(e.target.value.replace(/,/g, '')) || 0;
+                          setMonthlyTaxOverride(value);
+                        }}
+                        onFocus={(e) => {
+                          // If not overridden yet, set it to calculated value when they start editing
+                          if (monthlyTaxOverride === null) {
+                            setMonthlyTaxOverride(Math.round(calculatedMonthlyTax));
+                          }
+                        }}
+                        style={{ 
+                          paddingLeft: '24px',
+                          background: monthlyTaxOverride !== null ? '#f8f4ff' : 'white',
+                          borderColor: monthlyTaxOverride !== null ? '#7B2CBF' : '#ddd'
+                        }}
+                      />
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>
+                      Calculated: {formatCurrency(calculatedMonthlyTax)}/mo ({(propertyTaxRates[clientInfo.state] * 100).toFixed(2)}% rate)
+                    </div>
                   </div>
-                  <div className="cost-line">
-                    <span className="label">Homeowners Insurance</span>
-                    <span className="value">{formatCurrency(monthlyHOI)}</span>
+
+                  {/* Homeowners Insurance */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                      <label className="label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        Homeowners Insurance
+                        {monthlyHOIOverride !== null && (
+                          <span style={{ 
+                            width: '8px', 
+                            height: '8px', 
+                            borderRadius: '50%', 
+                            background: '#7B2CBF',
+                            display: 'inline-block'
+                          }} title="Manual override" />
+                        )}
+                      </label>
+                      {monthlyHOIOverride !== null && (
+                        <button 
+                          onClick={() => setMonthlyHOIOverride(null)}
+                          style={{ 
+                            fontSize: '10px', 
+                            padding: '2px 6px', 
+                            background: 'none', 
+                            border: '1px solid #ccc', 
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            color: '#666'
+                          }}
+                          title={`Reset to calculated: ${formatCurrency(calculatedMonthlyHOI)}`}
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#666', fontSize: '13px' }}>$</span>
+                      <input 
+                        type="text"
+                        value={monthlyHOIOverride !== null 
+                          ? monthlyHOIOverride.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+                          : calculatedMonthlyHOI.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+                        }
+                        onChange={(e) => {
+                          const value = parseFloat(e.target.value.replace(/,/g, '')) || 0;
+                          setMonthlyHOIOverride(value);
+                        }}
+                        onFocus={(e) => {
+                          // If not overridden yet, set it to calculated value when they start editing
+                          if (monthlyHOIOverride === null) {
+                            setMonthlyHOIOverride(Math.round(calculatedMonthlyHOI));
+                          }
+                        }}
+                        style={{ 
+                          paddingLeft: '24px',
+                          background: monthlyHOIOverride !== null ? '#f8f4ff' : 'white',
+                          borderColor: monthlyHOIOverride !== null ? '#7B2CBF' : '#ddd'
+                        }}
+                      />
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>
+                      Calculated: {formatCurrency(calculatedMonthlyHOI)}/mo ({formatCurrency(calculatedMonthlyHOI * 12)}/year)
+                    </div>
                   </div>
-                  <div className="cost-line" style={{ borderTop: '2px solid #ddd', paddingTop: '10px' }}>
-                    <span className="label">Total Monthly Escrow</span>
-                    <span className="value" style={{ color: '#1a1a1a' }}>{formatCurrency(monthlyEscrow)}</span>
+
+                  {/* Total */}
+                  <div style={{ borderTop: '2px solid #ddd', paddingTop: '12px', marginTop: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontWeight: '600', color: '#333' }}>Total Monthly Escrow</span>
+                      <span style={{ fontWeight: '700', fontSize: '16px', color: '#1a1a1a' }}>{formatCurrency(monthlyEscrow)}</span>
+                    </div>
+                    {(monthlyTaxOverride !== null || monthlyHOIOverride !== null) && (
+                      <div style={{ textAlign: 'right', marginTop: '4px' }}>
+                        <button 
+                          onClick={() => { setMonthlyTaxOverride(null); setMonthlyHOIOverride(null); }}
+                          style={{ 
+                            fontSize: '11px', 
+                            padding: '4px 10px', 
+                            background: '#f5f5f5', 
+                            border: '1px solid #ddd', 
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            color: '#666'
+                          }}
+                        >
+                          Reset All to Calculated
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3261,6 +3412,9 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                         vaFundingFeeFinanced,
                         vaIsIRRRL,
                         fhaMIPFinanced,
+                        // Include monthly escrow overrides
+                        monthlyTaxOverride,
+                        monthlyHOIOverride,
                         calculations: detailedCalcs
                       });
                     }}
