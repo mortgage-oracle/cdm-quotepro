@@ -852,6 +852,7 @@ export async function getAllLoanOfficersAdmin() {
   const timeoutId = setTimeout(() => controller.abort(), 15000);
   
   try {
+    // Fetch leaderboard stats (has all the metrics)
     const response = await fetch(
       `${SUPABASE_URL}/rest/v1/leaderboard_stats?select=*&order=total_quotes.desc`,
       {
@@ -871,8 +872,39 @@ export async function getAllLoanOfficersAdmin() {
       throw new Error(`HTTP error: ${response.status}`);
     }
     
-    const data = await response.json();
-    return { data, error: null };
+    const statsData = await response.json();
+    
+    // Also fetch application_url and created_at from loan_officers (not in the view)
+    const loResponse = await fetch(
+      `${SUPABASE_URL}/rest/v1/loan_officers?select=id,application_url,created_at`,
+      {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${token || SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    if (loResponse.ok) {
+      const loData = await loResponse.json();
+      // Create maps of id -> values
+      const urlMap = {};
+      const createdMap = {};
+      loData.forEach(lo => { 
+        urlMap[lo.id] = lo.application_url; 
+        createdMap[lo.id] = lo.created_at;
+      });
+      
+      // Merge into stats data
+      statsData.forEach(lo => {
+        lo.application_url = urlMap[lo.id] || null;
+        lo.created_at = createdMap[lo.id] || null;
+      });
+    }
+    
+    return { data: statsData, error: null };
   } catch (err) {
     console.error('Error fetching all LOs:', err);
     return { data: null, error: err };
