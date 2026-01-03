@@ -1672,8 +1672,12 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
       const effectiveLoComp = loCompensation + (loCompensationDollar / baseLoanAmount * 100);
       const pointsCost = calculatePointsCost(baseLoanAmount, ratePrice, effectiveLoComp);
       
+      // VA IRRRL has no appraisal
+      const isVAIRRRL = loanProgram === 'va' && vaIsIRRRL;
+      const effectiveAppraisalFee = isVAIRRRL ? 0 : feeTemplates.appraisal;
+      
       // Fixed third-party fees (Section B) - add upfront fee here if not financed
-      const thirdPartyFees = feeTemplates.appraisal + feeTemplates.creditReport + 
+      const thirdPartyFees = effectiveAppraisalFee + feeTemplates.creditReport + 
                             feeTemplates.processing + feeTemplates.floodCert + feeTemplates.taxService +
                             closingUpfrontFee;
       
@@ -1851,12 +1855,16 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
 
   // Calculate effective cash flow with fee overrides for a specific quote
   const getEffectiveCashFlow = (calc) => {
+    // VA IRRRL has no appraisal
+    const isVAIRRRL = loanProgram === 'va' && vaIsIRRRL;
+    const effectiveAppraisal = isVAIRRRL ? 0 : (feeOverrides.appraisal !== undefined ? feeOverrides.appraisal : feeTemplates.appraisal);
+    
     // Calculate total loan costs (Section D) with overrides
     const pointsCost = calc.pointsCost > 0 ? calc.pointsCost : 0;
     const totalD = pointsCost +
       (feeOverrides.adminFee !== undefined ? feeOverrides.adminFee : feeTemplates.adminFee) +
       (feeOverrides.underwritingFee !== undefined ? feeOverrides.underwritingFee : feeTemplates.underwritingFee) +
-      (feeOverrides.appraisal !== undefined ? feeOverrides.appraisal : feeTemplates.appraisal) +
+      effectiveAppraisal +
       (feeOverrides.creditReport !== undefined ? feeOverrides.creditReport : feeTemplates.creditReport) +
       (feeOverrides.floodCert !== undefined ? feeOverrides.floodCert : feeTemplates.floodCert) +
       (feeOverrides.processing !== undefined ? feeOverrides.processing : feeTemplates.processing) +
@@ -3323,6 +3331,9 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                       }
                       // Calculate detailed fees for each option
                       const detailedCalcs = calculations.slice(0, 3).map((calc, i) => {
+                        // VA IRRRL has no appraisal
+                        const isVAIRRRL = loanProgram === 'va' && vaIsIRRRL;
+                        
                         // Use overrides if present, otherwise use templates/calculated values
                         const effectiveLendersTitle = feeOverrides.lendersTitle !== undefined 
                           ? feeOverrides.lendersTitle 
@@ -3344,8 +3355,8 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                           total: (calc.pointsCost > 0 ? calc.pointsCost : 0) + effectiveAdminFee + effectiveUnderwritingFee
                         };
                         
-                        // Section B - with overrides
-                        const effectiveAppraisal = feeOverrides.appraisal !== undefined ? feeOverrides.appraisal : feeTemplates.appraisal;
+                        // Section B - with overrides (appraisal is $0 for VA IRRRL)
+                        const effectiveAppraisal = isVAIRRRL ? 0 : (feeOverrides.appraisal !== undefined ? feeOverrides.appraisal : feeTemplates.appraisal);
                         const effectiveCreditReport = feeOverrides.creditReport !== undefined ? feeOverrides.creditReport : feeTemplates.creditReport;
                         const effectiveFloodCert = feeOverrides.floodCert !== undefined ? feeOverrides.floodCert : feeTemplates.floodCert;
                         const effectiveProcessing = feeOverrides.processing !== undefined ? feeOverrides.processing : feeTemplates.processing;
@@ -6717,10 +6728,14 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
       {feeModalOpen && calculations[feeModalQuoteIndex] && (() => {
         // Calculate totals with fee overrides for this modal
         const calc = calculations[feeModalQuoteIndex];
+        // VA IRRRL has no appraisal
+        const isVAIRRRL = loanProgram === 'va' && vaIsIRRRL;
+        const effectiveAppraisalForModal = isVAIRRRL ? 0 : (feeOverrides.appraisal !== undefined ? feeOverrides.appraisal : feeTemplates.appraisal);
+        
         const totalD = (calc.pointsCost > 0 ? calc.pointsCost : 0) + 
           (feeOverrides.adminFee !== undefined ? feeOverrides.adminFee : feeTemplates.adminFee) +
           (feeOverrides.underwritingFee !== undefined ? feeOverrides.underwritingFee : feeTemplates.underwritingFee) +
-          (feeOverrides.appraisal !== undefined ? feeOverrides.appraisal : feeTemplates.appraisal) +
+          effectiveAppraisalForModal +
           (feeOverrides.creditReport !== undefined ? feeOverrides.creditReport : feeTemplates.creditReport) +
           (feeOverrides.floodCert !== undefined ? feeOverrides.floodCert : feeTemplates.floodCert) +
           (feeOverrides.processing !== undefined ? feeOverrides.processing : feeTemplates.processing) +
@@ -6831,7 +6846,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600', marginBottom: '8px', fontSize: '14px' }}>
                     <span>B. Services You Cannot Shop For</span>
                     <span className="mono">{formatCurrency(
-                      (feeOverrides.appraisal !== undefined ? feeOverrides.appraisal : feeTemplates.appraisal) +
+                      effectiveAppraisalForModal +
                       (feeOverrides.creditReport !== undefined ? feeOverrides.creditReport : feeTemplates.creditReport) +
                       (feeOverrides.floodCert !== undefined ? feeOverrides.floodCert : feeTemplates.floodCert) +
                       (feeOverrides.processing !== undefined ? feeOverrides.processing : feeTemplates.processing) +
@@ -6840,13 +6855,28 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                     )}</span>
                   </div>
                   <div style={{ paddingLeft: '12px', fontSize: '13px' }}>
-                    <EditableFeeRow 
-                      label="Appraisal Fee" 
-                      feeKey="appraisal" 
-                      defaultValue={feeTemplates.appraisal}
-                      overrides={feeOverrides}
-                      setOverrides={setFeeOverrides}
-                    />
+                    {/* Appraisal - show as N/A for VA IRRRL */}
+                    {isVAIRRRL ? (
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        padding: '6px 0', 
+                        borderBottom: '1px solid #f0f0f0',
+                        color: '#888',
+                        fontStyle: 'italic'
+                      }}>
+                        <span>Appraisal Fee</span>
+                        <span style={{ color: '#7B2CBF', fontWeight: '500' }}>N/A - IRRRL</span>
+                      </div>
+                    ) : (
+                      <EditableFeeRow 
+                        label="Appraisal Fee" 
+                        feeKey="appraisal" 
+                        defaultValue={feeTemplates.appraisal}
+                        overrides={feeOverrides}
+                        setOverrides={setFeeOverrides}
+                      />
+                    )}
                     <EditableFeeRow 
                       label="Credit Report" 
                       feeKey="creditReport" 
@@ -6971,7 +7001,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                     (calc.pointsCost > 0 ? calc.pointsCost : 0) + 
                     (feeOverrides.adminFee !== undefined ? feeOverrides.adminFee : feeTemplates.adminFee) +
                     (feeOverrides.underwritingFee !== undefined ? feeOverrides.underwritingFee : feeTemplates.underwritingFee) +
-                    (feeOverrides.appraisal !== undefined ? feeOverrides.appraisal : feeTemplates.appraisal) +
+                    effectiveAppraisalForModal +
                     (feeOverrides.creditReport !== undefined ? feeOverrides.creditReport : feeTemplates.creditReport) +
                     (feeOverrides.floodCert !== undefined ? feeOverrides.floodCert : feeTemplates.floodCert) +
                     (feeOverrides.processing !== undefined ? feeOverrides.processing : feeTemplates.processing) +
