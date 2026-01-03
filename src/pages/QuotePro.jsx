@@ -1849,6 +1849,46 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
 
   const yearlySummary = useMemo(() => getYearlySummary(amortSchedule), [amortSchedule]);
 
+  // Calculate effective cash flow with fee overrides for a specific quote
+  const getEffectiveCashFlow = (calc) => {
+    // Calculate total loan costs (Section D) with overrides
+    const pointsCost = calc.pointsCost > 0 ? calc.pointsCost : 0;
+    const totalD = pointsCost +
+      (feeOverrides.adminFee !== undefined ? feeOverrides.adminFee : feeTemplates.adminFee) +
+      (feeOverrides.underwritingFee !== undefined ? feeOverrides.underwritingFee : feeTemplates.underwritingFee) +
+      (feeOverrides.appraisal !== undefined ? feeOverrides.appraisal : feeTemplates.appraisal) +
+      (feeOverrides.creditReport !== undefined ? feeOverrides.creditReport : feeTemplates.creditReport) +
+      (feeOverrides.floodCert !== undefined ? feeOverrides.floodCert : feeTemplates.floodCert) +
+      (feeOverrides.processing !== undefined ? feeOverrides.processing : feeTemplates.processing) +
+      (feeOverrides.taxService !== undefined ? feeOverrides.taxService : feeTemplates.taxService) +
+      (calc.closingUpfrontFee || 0) +
+      (feeOverrides.lendersTitle !== undefined ? feeOverrides.lendersTitle : (titleInsuranceRates[clientInfo.state] || 2.5) * (calc.totalLoanAmount / 1000)) +
+      (feeOverrides.notaryFee !== undefined ? feeOverrides.notaryFee : feeTemplates.notaryFee) +
+      (feeOverrides.recordingServiceFee !== undefined ? feeOverrides.recordingServiceFee : feeTemplates.recordingServiceFee) +
+      (feeOverrides.settlementFee !== undefined ? feeOverrides.settlementFee : feeTemplates.settlementFee);
+    
+    // Calculate other costs (Section I) with overrides
+    const totalI = (feeOverrides.recordingFee !== undefined ? feeOverrides.recordingFee : (recordingFees[clientInfo.state] || 115)) + 
+      (feeOverrides.transferTax !== undefined ? feeOverrides.transferTax : (transferTaxRates[clientInfo.state] || 0) * (propertyValue / 1000)) +
+      calc.prepaidInterest + 
+      (feeOverrides.prepaidHOI !== undefined ? feeOverrides.prepaidHOI : calc.monthlyHOI * effectivePrepaidSettings.prepaidMonthsInsurance) +
+      (feeOverrides.prepaidTax !== undefined ? feeOverrides.prepaidTax : calc.monthlyTax * effectivePrepaidSettings.prepaidMonthsTax) +
+      (effectivePrepaidSettings.escrowWaived ? 0 : (
+        (feeOverrides.escrowHOI !== undefined ? feeOverrides.escrowHOI : calc.monthlyHOI * effectivePrepaidSettings.escrowMonthsInsurance) +
+        (feeOverrides.escrowTax !== undefined ? feeOverrides.escrowTax : calc.monthlyTax * effectivePrepaidSettings.escrowMonthsTax)
+      ));
+    
+    const totalJ = totalD + totalI;
+    const totalWithCredits = totalJ - calc.lenderCredit;
+    const downPayment = propertyValue - baseLoanAmount;
+    
+    if (loanPurpose === 'purchase') {
+      return downPayment + totalWithCredits;
+    } else {
+      return baseLoanAmount - propertyDetails.currentBalance - totalWithCredits;
+    }
+  };
+
   // Second Mortgage - CLTV calculation
   const secondMortgageCLTV = useMemo(() => {
     const totalDebt = secondMortgageDetails.firstMortgageBalance + secondMortgageDetails.lineAmount;
@@ -3283,70 +3323,99 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                       }
                       // Calculate detailed fees for each option
                       const detailedCalcs = calculations.slice(0, 3).map((calc, i) => {
-                        const lendersTitle = (titleInsuranceRates[clientInfo.state] || 2.5) * (calc.totalLoanAmount / 1000);
-                        const recordingFee = recordingFees[clientInfo.state] || 115;
-                        const transferTax = (transferTaxRates[clientInfo.state] || 0) * (propertyValue / 1000);
+                        // Use overrides if present, otherwise use templates/calculated values
+                        const effectiveLendersTitle = feeOverrides.lendersTitle !== undefined 
+                          ? feeOverrides.lendersTitle 
+                          : (titleInsuranceRates[clientInfo.state] || 2.5) * (calc.totalLoanAmount / 1000);
+                        const effectiveRecordingFee = feeOverrides.recordingFee !== undefined 
+                          ? feeOverrides.recordingFee 
+                          : (recordingFees[clientInfo.state] || 115);
+                        const effectiveTransferTax = feeOverrides.transferTax !== undefined 
+                          ? feeOverrides.transferTax 
+                          : (transferTaxRates[clientInfo.state] || 0) * (propertyValue / 1000);
                         
-                        // Section A
+                        // Section A - with overrides
+                        const effectiveAdminFee = feeOverrides.adminFee !== undefined ? feeOverrides.adminFee : feeTemplates.adminFee;
+                        const effectiveUnderwritingFee = feeOverrides.underwritingFee !== undefined ? feeOverrides.underwritingFee : feeTemplates.underwritingFee;
                         const sectionA = {
                           pointsCost: calc.pointsCost > 0 ? calc.pointsCost : 0,
-                          adminFee: feeTemplates.adminFee,
-                          underwritingFee: feeTemplates.underwritingFee,
-                          total: (calc.pointsCost > 0 ? calc.pointsCost : 0) + feeTemplates.adminFee + feeTemplates.underwritingFee
+                          adminFee: effectiveAdminFee,
+                          underwritingFee: effectiveUnderwritingFee,
+                          total: (calc.pointsCost > 0 ? calc.pointsCost : 0) + effectiveAdminFee + effectiveUnderwritingFee
                         };
                         
-                        // Section B - includes upfront government fees if not financed
+                        // Section B - with overrides
+                        const effectiveAppraisal = feeOverrides.appraisal !== undefined ? feeOverrides.appraisal : feeTemplates.appraisal;
+                        const effectiveCreditReport = feeOverrides.creditReport !== undefined ? feeOverrides.creditReport : feeTemplates.creditReport;
+                        const effectiveFloodCert = feeOverrides.floodCert !== undefined ? feeOverrides.floodCert : feeTemplates.floodCert;
+                        const effectiveProcessing = feeOverrides.processing !== undefined ? feeOverrides.processing : feeTemplates.processing;
+                        const effectiveTaxService = feeOverrides.taxService !== undefined ? feeOverrides.taxService : feeTemplates.taxService;
                         const sectionB = {
-                          appraisal: feeTemplates.appraisal,
-                          creditReport: feeTemplates.creditReport,
-                          floodCert: feeTemplates.floodCert,
-                          processing: feeTemplates.processing,
-                          taxService: feeTemplates.taxService,
+                          appraisal: effectiveAppraisal,
+                          creditReport: effectiveCreditReport,
+                          floodCert: effectiveFloodCert,
+                          processing: effectiveProcessing,
+                          taxService: effectiveTaxService,
                           // Upfront government fee (if paid at closing, not financed)
                           upfrontFee: calc.closingUpfrontFee || 0,
                           upfrontFeeLabel: calc.upfrontFeeLabel || '',
                           upfrontFeeFinanced: calc.upfrontFeeFinanced,
-                          total: feeTemplates.appraisal + feeTemplates.creditReport + feeTemplates.floodCert + 
-                                 feeTemplates.processing + feeTemplates.taxService + (calc.closingUpfrontFee || 0)
+                          total: effectiveAppraisal + effectiveCreditReport + effectiveFloodCert + 
+                                 effectiveProcessing + effectiveTaxService + (calc.closingUpfrontFee || 0)
                         };
                         
-                        // Section C
+                        // Section C - with overrides
+                        const effectiveNotaryFee = feeOverrides.notaryFee !== undefined ? feeOverrides.notaryFee : feeTemplates.notaryFee;
+                        const effectiveRecordingServiceFee = feeOverrides.recordingServiceFee !== undefined ? feeOverrides.recordingServiceFee : feeTemplates.recordingServiceFee;
+                        const effectiveSettlementFee = feeOverrides.settlementFee !== undefined ? feeOverrides.settlementFee : feeTemplates.settlementFee;
                         const sectionC = {
-                          lendersTitle,
-                          notaryFee: feeTemplates.notaryFee,
-                          recordingServiceFee: feeTemplates.recordingServiceFee,
-                          settlementFee: feeTemplates.settlementFee,
-                          total: lendersTitle + feeTemplates.notaryFee + feeTemplates.recordingServiceFee + feeTemplates.settlementFee
+                          lendersTitle: effectiveLendersTitle,
+                          notaryFee: effectiveNotaryFee,
+                          recordingServiceFee: effectiveRecordingServiceFee,
+                          settlementFee: effectiveSettlementFee,
+                          total: effectiveLendersTitle + effectiveNotaryFee + effectiveRecordingServiceFee + effectiveSettlementFee
                         };
                         
                         // Section D (Total Loan Costs)
                         const totalLoanCosts = sectionA.total + sectionB.total + sectionC.total;
                         
-                        // Section E
+                        // Section E - with overrides
                         const sectionE = {
-                          recordingFee,
-                          transferTax,
-                          total: recordingFee + transferTax
+                          recordingFee: effectiveRecordingFee,
+                          transferTax: effectiveTransferTax,
+                          total: effectiveRecordingFee + effectiveTransferTax
                         };
                         
-                        // Section F
+                        // Section F - with overrides
+                        const effectivePrepaidHOI = feeOverrides.prepaidHOI !== undefined 
+                          ? feeOverrides.prepaidHOI 
+                          : calc.monthlyHOI * effectivePrepaidSettings.prepaidMonthsInsurance;
+                        const effectivePrepaidTax = feeOverrides.prepaidTax !== undefined 
+                          ? feeOverrides.prepaidTax 
+                          : calc.monthlyTax * effectivePrepaidSettings.prepaidMonthsTax;
                         const sectionF = {
-                          prepaidHOI: calc.monthlyHOI * effectivePrepaidSettings.prepaidMonthsInsurance,
+                          prepaidHOI: effectivePrepaidHOI,
                           prepaidInterest: calc.prepaidInterest,
-                          prepaidTax: calc.monthlyTax * effectivePrepaidSettings.prepaidMonthsTax,
-                          total: (calc.monthlyHOI * effectivePrepaidSettings.prepaidMonthsInsurance) + calc.prepaidInterest + (calc.monthlyTax * effectivePrepaidSettings.prepaidMonthsTax)
+                          prepaidTax: effectivePrepaidTax,
+                          total: effectivePrepaidHOI + calc.prepaidInterest + effectivePrepaidTax
                         };
                         
-                        // Section G
+                        // Section G - with overrides
+                        const effectiveEscrowHOI = feeOverrides.escrowHOI !== undefined 
+                          ? feeOverrides.escrowHOI 
+                          : calc.monthlyHOI * effectivePrepaidSettings.escrowMonthsInsurance;
+                        const effectiveEscrowTax = feeOverrides.escrowTax !== undefined 
+                          ? feeOverrides.escrowTax 
+                          : calc.monthlyTax * effectivePrepaidSettings.escrowMonthsTax;
                         const sectionG = effectivePrepaidSettings.escrowWaived ? {
                           escrowHOI: 0,
                           escrowTax: 0,
                           total: 0,
                           waived: true
                         } : {
-                          escrowHOI: calc.monthlyHOI * effectivePrepaidSettings.escrowMonthsInsurance,
-                          escrowTax: calc.monthlyTax * effectivePrepaidSettings.escrowMonthsTax,
-                          total: (calc.monthlyHOI * effectivePrepaidSettings.escrowMonthsInsurance) + (calc.monthlyTax * effectivePrepaidSettings.escrowMonthsTax),
+                          escrowHOI: effectiveEscrowHOI,
+                          escrowTax: effectiveEscrowTax,
+                          total: effectiveEscrowHOI + effectiveEscrowTax,
                           waived: false
                         };
                         
@@ -3660,12 +3729,17 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                       {/* Main Content */}
                       <div style={{ padding: '14px 14px 10px', textAlign: 'center' }}>
                         <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          {loanPurpose === 'purchase' || calc.cashFlow < 0 ? 'Est. Cash to Close' : 'Est. Cash Out'}
+                          {loanPurpose === 'purchase' || getEffectiveCashFlow(calc) < 0 ? 'Est. Cash to Close' : 'Est. Cash Out'}
                         </div>
                         <div style={{ fontSize: '26px', fontWeight: '700', 
                                       color: 'white', fontFamily: "'JetBrains Mono', monospace" }}>
-                          {formatCurrency(Math.abs(calc.cashFlow))}
+                          {formatCurrency(Math.abs(getEffectiveCashFlow(calc)))}
                         </div>
+                        {Object.keys(feeOverrides).length > 0 && (
+                          <div style={{ fontSize: '9px', color: '#7B2CBF', marginTop: '4px', fontWeight: '600' }}>
+                            ● ADJUSTED
+                          </div>
+                        )}
                       </div>
                       {/* Expand Footer */}
                       <div style={{ 
