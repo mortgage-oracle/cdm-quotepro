@@ -2505,6 +2505,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
             { id: 'saved', label: 'Saved' },
             { id: 'notifications', label: '🔔 Activity' },
             { id: 'leaderboard', label: '🏆 Leaderboard' },
+            { id: 'tutorial', label: '📚 Tutorial' },
             ...(isAdmin ? [{ id: 'admin', label: '⚙ Admin' }] : [])
           ].map(tab => (
             <button
@@ -5986,6 +5987,177 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* ================================================================ */}
+        {/* TUTORIAL TAB - Video & User Guide */}
+        {/* ================================================================ */}
+        {activeTab === 'tutorial' && (
+          <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+            {/* Header */}
+            <div className="card" style={{ marginBottom: '24px', textAlign: 'center' }}>
+              <h2 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px' }}>📚 Tutorial & Resources</h2>
+              <p style={{ color: '#666', fontSize: '16px' }}>Everything you need to master CDM QuotePro</p>
+            </div>
+            
+            {/* Video Section */}
+            <div className="card" style={{ marginBottom: '24px' }}>
+              <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                🎬 Watch the Tutorial Video
+              </h3>
+              <p style={{ color: '#666', marginBottom: '20px' }}>
+                Get up to speed quickly with this comprehensive walkthrough of all QuotePro features.
+              </p>
+              
+              {/* Vimeo Embed */}
+              <div style={{ 
+                position: 'relative', 
+                paddingBottom: '56.25%', /* 16:9 aspect ratio */
+                height: 0, 
+                overflow: 'hidden',
+                borderRadius: '12px',
+                background: '#000'
+              }}>
+                <iframe
+                  src="https://player.vimeo.com/video/1151281181?badge=0&autopause=0&player_id=0&app_id=58479"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    border: 'none'
+                  }}
+                  allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media"
+                  title="CDM QuotePro Tutorial"
+                />
+              </div>
+              
+              <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'center' }}>
+                <a 
+                  href="https://vimeo.com/1151281181" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style={{
+                    color: '#7B2CBF',
+                    fontSize: '14px',
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  🔗 Open in Vimeo for full screen
+                </a>
+              </div>
+            </div>
+            
+            {/* User Guide Section */}
+            <div className="card" style={{ marginBottom: '24px' }}>
+              <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                📖 User Guide
+              </h3>
+              <p style={{ color: '#666', marginBottom: '20px' }}>
+                Download the comprehensive user guide for detailed instructions on all features.
+              </p>
+              
+              <div style={{ 
+                background: 'linear-gradient(135deg, #7B2CBF10, #9D4EDD10)', 
+                borderRadius: '12px', 
+                padding: '24px',
+                border: '1px solid #7B2CBF30'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+                  <div style={{ 
+                    background: '#7B2CBF', 
+                    borderRadius: '12px', 
+                    padding: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}>
+                    <span style={{ fontSize: '40px' }}>📄</span>
+                  </div>
+                  <div style={{ flex: 1, minWidth: '200px' }}>
+                    <div style={{ fontWeight: '700', fontSize: '16px', marginBottom: '4px' }}>
+                      CDM QuotePro User Guide
+                    </div>
+                    <div style={{ color: '#666', fontSize: '13px', marginBottom: '12px' }}>
+                      PDF • Complete documentation covering all features
+                    </div>
+                    <a 
+                      href="https://cdmquotepro.com/CDM_QuotePro_User_Guide.pdf" 
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        background: 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
+                        color: 'white',
+                        padding: '10px 20px',
+                        borderRadius: '8px',
+                        textDecoration: 'none',
+                        fontWeight: '600',
+                        fontSize: '14px'
+                      }}
+                    >
+                      ⬇️ Download PDF
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Quick Tips Section */}
+            <div className="card">
+              <h3 style={{ fontSize: '20px', fontWeight: '700', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                💡 Quick Tips
+              </h3>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
+                <div style={{ background: '#f8f8f8', borderRadius: '10px', padding: '16px' }}>
+                  <div style={{ fontWeight: '600', marginBottom: '8px', color: '#7B2CBF' }}>⚡ Speed Up Your Workflow</div>
+                  <div style={{ fontSize: '13px', color: '#666', lineHeight: '1.5' }}>
+                    Set up your default fees and compensation in Settings. They'll auto-populate for every new quote.
+                  </div>
+                </div>
+                
+                <div style={{ background: '#f8f8f8', borderRadius: '10px', padding: '16px' }}>
+                  <div style={{ fontWeight: '600', marginBottom: '8px', color: '#7B2CBF' }}>📱 Share Smarter</div>
+                  <div style={{ fontSize: '13px', color: '#666', lineHeight: '1.5' }}>
+                    Copy the quote link and text it to clients. They can view on any device without logging in.
+                  </div>
+                </div>
+                
+                <div style={{ background: '#f8f8f8', borderRadius: '10px', padding: '16px' }}>
+                  <div style={{ fontWeight: '600', marginBottom: '8px', color: '#7B2CBF' }}>🔔 Stay Informed</div>
+                  <div style={{ fontSize: '13px', color: '#666', lineHeight: '1.5' }}>
+                    Check the Activity tab to see when clients view your quotes and click "Apply Now."
+                  </div>
+                </div>
+                
+                <div style={{ background: '#f8f8f8', borderRadius: '10px', padding: '16px' }}>
+                  <div style={{ fontWeight: '600', marginBottom: '8px', color: '#7B2CBF' }}>💰 Adjust Fees On-The-Fly</div>
+                  <div style={{ fontSize: '13px', color: '#666', lineHeight: '1.5' }}>
+                    Click "Fee Details" on any quote card to customize individual fees before sharing.
+                  </div>
+                </div>
+              </div>
+              
+              <div style={{ marginTop: '24px', padding: '16px', background: '#7B2CBF10', borderRadius: '10px', border: '1px solid #7B2CBF30' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '24px' }}>🤔</span>
+                  <div>
+                    <div style={{ fontWeight: '600', marginBottom: '4px' }}>Need Help?</div>
+                    <div style={{ fontSize: '13px', color: '#666' }}>
+                      Contact your branch manager or reach out to support for assistance.
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
