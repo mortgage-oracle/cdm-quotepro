@@ -786,6 +786,15 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
   const isAdmin = loanOfficer?.role === 'admin';
   const isDeactivated = loanOfficer?.is_active === false;
   
+  // LO Management - Search, Sort, Pagination, POS URL editing
+  const [loSearchQuery, setLoSearchQuery] = useState('');
+  const [loSortColumn, setLoSortColumn] = useState('created_at'); // Default: newest registrations first
+  const [loSortDirection, setLoSortDirection] = useState('desc'); // 'asc' or 'desc'
+  const [loCurrentPage, setLoCurrentPage] = useState(1);
+  const [editingLoPosUrl, setEditingLoPosUrl] = useState(null); // { id, email, full_name, application_url }
+  const [savingPosUrl, setSavingPosUrl] = useState(false);
+  const LO_PAGE_SIZE = 25;
+  
   // Database quotes
   const [dbQuotes, setDbQuotes] = useState([]);
   const [loadingQuotes, setLoadingQuotes] = useState(false);
@@ -1321,6 +1330,106 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
     const csv = exportLoanOfficersToCSV(allLoanOfficers);
     const filename = `loan_officers_${new Date().toISOString().split('T')[0]}.csv`;
     downloadCSV(csv, filename);
+  };
+  
+  // LO Management - Filter, Sort, Paginate
+  const filteredAndSortedLOs = useMemo(() => {
+    let result = [...allLoanOfficers];
+    
+    // Filter by search query
+    if (loSearchQuery.trim()) {
+      const query = loSearchQuery.toLowerCase().trim();
+      result = result.filter(lo => 
+        (lo.full_name || '').toLowerCase().includes(query) ||
+        (lo.email || '').toLowerCase().includes(query) ||
+        (lo.nmls_number || '').toLowerCase().includes(query)
+      );
+    }
+    
+    // Sort
+    result.sort((a, b) => {
+      let aVal, bVal;
+      switch (loSortColumn) {
+        case 'total_quotes':
+          aVal = a.total_quotes || 0;
+          bVal = b.total_quotes || 0;
+          break;
+        case 'quotes_shared':
+          aVal = a.quotes_shared || 0;
+          bVal = b.quotes_shared || 0;
+          break;
+        case 'total_views':
+          aVal = a.total_views || 0;
+          bVal = b.total_views || 0;
+          break;
+        case 'apply_clicks':
+          aVal = a.apply_clicks || 0;
+          bVal = b.apply_clicks || 0;
+          break;
+        case 'created_at':
+          aVal = a.created_at ? new Date(a.created_at).getTime() : 0;
+          bVal = b.created_at ? new Date(b.created_at).getTime() : 0;
+          break;
+        case 'full_name':
+        default:
+          aVal = (a.full_name || '').toLowerCase();
+          bVal = (b.full_name || '').toLowerCase();
+      }
+      
+      if (typeof aVal === 'string') {
+        return loSortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+      return loSortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+    });
+    
+    return result;
+  }, [allLoanOfficers, loSearchQuery, loSortColumn, loSortDirection]);
+  
+  // Paginated LOs
+  const paginatedLOs = useMemo(() => {
+    const startIndex = (loCurrentPage - 1) * LO_PAGE_SIZE;
+    return filteredAndSortedLOs.slice(startIndex, startIndex + LO_PAGE_SIZE);
+  }, [filteredAndSortedLOs, loCurrentPage]);
+  
+  const totalLoPages = Math.ceil(filteredAndSortedLOs.length / LO_PAGE_SIZE);
+  
+  // Handle sort column click
+  const handleLoSort = (column) => {
+    if (loSortColumn === column) {
+      setLoSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setLoSortColumn(column);
+      setLoSortDirection('desc'); // Default to descending for metrics
+    }
+    setLoCurrentPage(1); // Reset to first page
+  };
+  
+  // Handle POS URL save
+  const handleSavePosUrl = async () => {
+    if (!editingLoPosUrl) return;
+    
+    setSavingPosUrl(true);
+    try {
+      const { error } = await updateLoanOfficerByEmail(editingLoPosUrl.email, {
+        application_url: editingLoPosUrl.application_url || null
+      });
+      
+      if (error) throw error;
+      
+      // Update local state
+      setAllLoanOfficers(prev => prev.map(lo => 
+        lo.id === editingLoPosUrl.id 
+          ? { ...lo, application_url: editingLoPosUrl.application_url }
+          : lo
+      ));
+      
+      setEditingLoPosUrl(null);
+    } catch (err) {
+      console.error('Error saving POS URL:', err);
+      alert('Failed to save POS URL. Please try again.');
+    } finally {
+      setSavingPosUrl(false);
+    }
   };
   
   // Share quote handler
@@ -5979,27 +6088,116 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                   
                   {/* Loan Officer Management Table */}
                   <div style={{ background: '#f8f8f8', borderRadius: '12px', padding: '20px' }}>
-                    <h3 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '16px' }}>
-                      👥 Loan Officer Management
-                    </h3>
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                        <thead>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                      <h3 style={{ fontSize: '16px', fontWeight: '700', margin: 0 }}>
+                        👥 Loan Officer Management
+                        <span style={{ fontWeight: '400', color: '#888', marginLeft: '8px', fontSize: '13px' }}>
+                          ({filteredAndSortedLOs.length} {filteredAndSortedLOs.length === 1 ? 'officer' : 'officers'})
+                        </span>
+                      </h3>
+                      {/* Search Input */}
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          type="text"
+                          placeholder="Search by name, email, or NMLS..."
+                          value={loSearchQuery}
+                          onChange={(e) => { setLoSearchQuery(e.target.value); setLoCurrentPage(1); }}
+                          style={{
+                            padding: '8px 12px 8px 36px',
+                            border: '1px solid #ddd',
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                            width: '280px',
+                            background: 'white'
+                          }}
+                        />
+                        <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#888' }}>🔍</span>
+                        {loSearchQuery && (
+                          <button
+                            onClick={() => { setLoSearchQuery(''); setLoCurrentPage(1); }}
+                            style={{
+                              position: 'absolute',
+                              right: '8px',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              color: '#888',
+                              fontSize: '14px'
+                            }}
+                          >✕</button>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Scrollable Table Container */}
+                    <div style={{ maxHeight: '600px', overflowY: 'auto', overflowX: 'auto', border: '1px solid #e0e0e0', borderRadius: '8px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '1200px' }}>
+                        <thead style={{ position: 'sticky', top: 0, background: 'white', zIndex: 1 }}>
                           <tr style={{ borderBottom: '2px solid #ddd' }}>
-                            <th style={{ textAlign: 'left', padding: '12px 8px', fontWeight: '600' }}>Name</th>
-                            <th style={{ textAlign: 'left', padding: '12px 8px', fontWeight: '600' }}>Email</th>
-                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600' }}>Status</th>
-                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600' }}>Account</th>
-                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600' }}>Quotes</th>
-                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600' }}>Shared</th>
-                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600' }}>Views</th>
-                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600' }}>Apply</th>
-                            <th style={{ textAlign: 'left', padding: '12px 8px', fontWeight: '600' }}>Last Active</th>
-                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600' }}>Actions</th>
+                            <th style={{ textAlign: 'left', padding: '12px 8px', fontWeight: '600', background: 'white' }}>Name</th>
+                            <th style={{ textAlign: 'left', padding: '12px 8px', fontWeight: '600', background: 'white' }}>Email</th>
+                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600', background: 'white' }}>Status</th>
+                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600', background: 'white' }}>Account</th>
+                            {/* Sortable Columns */}
+                            <th 
+                              onClick={() => handleLoSort('total_quotes')}
+                              style={{ 
+                                textAlign: 'center', padding: '12px 8px', fontWeight: '600', background: 'white',
+                                cursor: 'pointer', userSelect: 'none',
+                                color: loSortColumn === 'total_quotes' ? '#7B2CBF' : 'inherit'
+                              }}
+                            >
+                              Quotes {loSortColumn === 'total_quotes' && (loSortDirection === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
+                              onClick={() => handleLoSort('quotes_shared')}
+                              style={{ 
+                                textAlign: 'center', padding: '12px 8px', fontWeight: '600', background: 'white',
+                                cursor: 'pointer', userSelect: 'none',
+                                color: loSortColumn === 'quotes_shared' ? '#7B2CBF' : 'inherit'
+                              }}
+                            >
+                              Shared {loSortColumn === 'quotes_shared' && (loSortDirection === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
+                              onClick={() => handleLoSort('total_views')}
+                              style={{ 
+                                textAlign: 'center', padding: '12px 8px', fontWeight: '600', background: 'white',
+                                cursor: 'pointer', userSelect: 'none',
+                                color: loSortColumn === 'total_views' ? '#7B2CBF' : 'inherit'
+                              }}
+                            >
+                              Views {loSortColumn === 'total_views' && (loSortDirection === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th 
+                              onClick={() => handleLoSort('apply_clicks')}
+                              style={{ 
+                                textAlign: 'center', padding: '12px 8px', fontWeight: '600', background: 'white',
+                                cursor: 'pointer', userSelect: 'none',
+                                color: loSortColumn === 'apply_clicks' ? '#7B2CBF' : 'inherit'
+                              }}
+                            >
+                              Apply {loSortColumn === 'apply_clicks' && (loSortDirection === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600', background: 'white' }}>POS URL</th>
+                            <th 
+                              onClick={() => handleLoSort('created_at')}
+                              style={{ 
+                                textAlign: 'center', padding: '12px 8px', fontWeight: '600', background: 'white',
+                                cursor: 'pointer', userSelect: 'none',
+                                color: loSortColumn === 'created_at' ? '#7B2CBF' : 'inherit'
+                              }}
+                            >
+                              Registered {loSortColumn === 'created_at' && (loSortDirection === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th style={{ textAlign: 'left', padding: '12px 8px', fontWeight: '600', background: 'white' }}>Last Active</th>
+                            <th style={{ textAlign: 'center', padding: '12px 8px', fontWeight: '600', background: 'white' }}>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {allLoanOfficers.map((lo) => (
+                          {paginatedLOs.map((lo) => (
                             <tr 
                               key={lo.id} 
                               style={{ 
@@ -6011,7 +6209,7 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                                 <div style={{ fontWeight: '600' }}>{lo.full_name || '-'}</div>
                                 {lo.nmls_number && <div style={{ fontSize: '11px', color: '#888' }}>NMLS# {lo.nmls_number}</div>}
                               </td>
-                              <td style={{ padding: '12px 8px', color: '#666' }}>{lo.email}</td>
+                              <td style={{ padding: '12px 8px', color: '#666', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lo.email}</td>
                               <td style={{ padding: '12px 8px', textAlign: 'center' }}>
                                 {lo.is_online ? (
                                   <span style={{ color: '#22c55e', fontWeight: '600' }}>🟢 Online</span>
@@ -6030,7 +6228,34 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                               <td style={{ padding: '12px 8px', textAlign: 'center' }}>{lo.quotes_shared || 0}</td>
                               <td style={{ padding: '12px 8px', textAlign: 'center' }}>{lo.total_views || 0}</td>
                               <td style={{ padding: '12px 8px', textAlign: 'center' }}>{lo.apply_clicks || 0}</td>
-                              <td style={{ padding: '12px 8px', color: '#666', fontSize: '12px' }}>
+                              <td style={{ padding: '12px 8px', textAlign: 'center' }}>
+                                <button
+                                  onClick={() => setEditingLoPosUrl({
+                                    id: lo.id,
+                                    email: lo.email,
+                                    full_name: lo.full_name,
+                                    application_url: lo.application_url || ''
+                                  })}
+                                  style={{
+                                    background: lo.application_url ? '#dcfce7' : '#f3f4f6',
+                                    color: lo.application_url ? '#16a34a' : '#666',
+                                    border: 'none',
+                                    padding: '4px 8px',
+                                    borderRadius: '4px',
+                                    fontSize: '10px',
+                                    fontWeight: '600',
+                                    cursor: 'pointer',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  title={lo.application_url || 'Not set'}
+                                >
+                                  {lo.application_url ? '✓ Set' : '+ Add'}
+                                </button>
+                              </td>
+                              <td style={{ padding: '12px 8px', color: '#666', fontSize: '12px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                {lo.created_at ? new Date(lo.created_at).toLocaleDateString() : '-'}
+                              </td>
+                              <td style={{ padding: '12px 8px', color: '#666', fontSize: '12px', whiteSpace: 'nowrap' }}>
                                 {lo.last_activity ? (
                                   (() => {
                                     const diff = Date.now() - new Date(lo.last_activity).getTime();
@@ -6070,12 +6295,157 @@ export default function LoanQuotePro({ user, loanOfficer, onSignOut }) {
                         </tbody>
                       </table>
                     </div>
-                    {allLoanOfficers.length === 0 && (
+                    
+                    {/* Pagination Controls */}
+                    {totalLoPages > 1 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #e0e0e0' }}>
+                        <div style={{ fontSize: '13px', color: '#666' }}>
+                          Showing {((loCurrentPage - 1) * LO_PAGE_SIZE) + 1} - {Math.min(loCurrentPage * LO_PAGE_SIZE, filteredAndSortedLOs.length)} of {filteredAndSortedLOs.length}
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <button
+                            onClick={() => setLoCurrentPage(1)}
+                            disabled={loCurrentPage === 1}
+                            style={{
+                              padding: '6px 12px',
+                              border: '1px solid #ddd',
+                              borderRadius: '6px',
+                              background: loCurrentPage === 1 ? '#f5f5f5' : 'white',
+                              cursor: loCurrentPage === 1 ? 'not-allowed' : 'pointer',
+                              color: loCurrentPage === 1 ? '#aaa' : '#333',
+                              fontSize: '12px'
+                            }}
+                          >« First</button>
+                          <button
+                            onClick={() => setLoCurrentPage(prev => Math.max(1, prev - 1))}
+                            disabled={loCurrentPage === 1}
+                            style={{
+                              padding: '6px 12px',
+                              border: '1px solid #ddd',
+                              borderRadius: '6px',
+                              background: loCurrentPage === 1 ? '#f5f5f5' : 'white',
+                              cursor: loCurrentPage === 1 ? 'not-allowed' : 'pointer',
+                              color: loCurrentPage === 1 ? '#aaa' : '#333',
+                              fontSize: '12px'
+                            }}
+                          >‹ Prev</button>
+                          <span style={{ padding: '6px 12px', fontWeight: '600', color: '#7B2CBF' }}>
+                            Page {loCurrentPage} of {totalLoPages}
+                          </span>
+                          <button
+                            onClick={() => setLoCurrentPage(prev => Math.min(totalLoPages, prev + 1))}
+                            disabled={loCurrentPage === totalLoPages}
+                            style={{
+                              padding: '6px 12px',
+                              border: '1px solid #ddd',
+                              borderRadius: '6px',
+                              background: loCurrentPage === totalLoPages ? '#f5f5f5' : 'white',
+                              cursor: loCurrentPage === totalLoPages ? 'not-allowed' : 'pointer',
+                              color: loCurrentPage === totalLoPages ? '#aaa' : '#333',
+                              fontSize: '12px'
+                            }}
+                          >Next ›</button>
+                          <button
+                            onClick={() => setLoCurrentPage(totalLoPages)}
+                            disabled={loCurrentPage === totalLoPages}
+                            style={{
+                              padding: '6px 12px',
+                              border: '1px solid #ddd',
+                              borderRadius: '6px',
+                              background: loCurrentPage === totalLoPages ? '#f5f5f5' : 'white',
+                              cursor: loCurrentPage === totalLoPages ? 'not-allowed' : 'pointer',
+                              color: loCurrentPage === totalLoPages ? '#aaa' : '#333',
+                              fontSize: '12px'
+                            }}
+                          >Last »</button>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {filteredAndSortedLOs.length === 0 && (
                       <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
-                        No loan officers found
+                        {loSearchQuery ? `No loan officers found matching "${loSearchQuery}"` : 'No loan officers found'}
                       </div>
                     )}
                   </div>
+                  
+                  {/* POS URL Edit Modal */}
+                  {editingLoPosUrl && (
+                    <div style={{
+                      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                      background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      zIndex: 1000, padding: '20px'
+                    }} onClick={() => setEditingLoPosUrl(null)}>
+                      <div style={{
+                        background: 'white', borderRadius: '16px', maxWidth: '500px', width: '100%',
+                        boxShadow: '0 25px 50px rgba(0,0,0,0.25)'
+                      }} onClick={(e) => e.stopPropagation()}>
+                        <div style={{ padding: '20px', borderBottom: '1px solid #e0e0e0' }}>
+                          <h3 style={{ fontSize: '18px', fontWeight: '700', margin: 0 }}>
+                            🔗 Edit POS URL
+                          </h3>
+                          <p style={{ color: '#666', fontSize: '13px', margin: '8px 0 0' }}>
+                            {editingLoPosUrl.full_name || editingLoPosUrl.email}
+                          </p>
+                        </div>
+                        <div style={{ padding: '20px' }}>
+                          <label style={{ display: 'block', marginBottom: '8px', fontWeight: '600', fontSize: '13px' }}>
+                            Application URL (POS)
+                          </label>
+                          <input
+                            type="url"
+                            placeholder="https://apply.yoursite.com/lo-name"
+                            value={editingLoPosUrl.application_url}
+                            onChange={(e) => setEditingLoPosUrl(prev => ({ ...prev, application_url: e.target.value }))}
+                            style={{
+                              width: '100%',
+                              padding: '12px',
+                              border: '1px solid #ddd',
+                              borderRadius: '8px',
+                              fontSize: '14px'
+                            }}
+                          />
+                          <p style={{ fontSize: '11px', color: '#888', marginTop: '8px' }}>
+                            This URL will be used for the "Apply Now" button on shared quotes for this loan officer.
+                          </p>
+                          {editingLoPosUrl.application_url && (
+                            <div style={{ marginTop: '12px', padding: '10px', background: '#f8f8f8', borderRadius: '6px', fontSize: '12px' }}>
+                              <strong>Preview:</strong>{' '}
+                              <a href={editingLoPosUrl.application_url} target="_blank" rel="noopener noreferrer" style={{ color: '#7B2CBF', wordBreak: 'break-all' }}>
+                                {editingLoPosUrl.application_url}
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ padding: '16px 20px', borderTop: '1px solid #e0e0e0', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                          <button
+                            onClick={() => setEditingLoPosUrl(null)}
+                            style={{
+                              padding: '10px 20px',
+                              border: '1px solid #ddd',
+                              borderRadius: '8px',
+                              background: 'white',
+                              cursor: 'pointer',
+                              fontWeight: '600'
+                            }}
+                          >Cancel</button>
+                          <button
+                            onClick={handleSavePosUrl}
+                            disabled={savingPosUrl}
+                            style={{
+                              padding: '10px 20px',
+                              border: 'none',
+                              borderRadius: '8px',
+                              background: savingPosUrl ? '#ccc' : 'linear-gradient(135deg, #7B2CBF, #9D4EDD)',
+                              color: 'white',
+                              cursor: savingPosUrl ? 'not-allowed' : 'pointer',
+                              fontWeight: '600'
+                            }}
+                          >{savingPosUrl ? 'Saving...' : 'Save POS URL'}</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
